@@ -1,0 +1,84 @@
+{
+  "suite": {
+    "id": "x402bench-cannes",
+    "name": "x402Bench Agentic Payments Benchmark",
+    "minPassingScore": 75
+  },
+  "defaultRetryPolicy": {
+    "retries": 1,
+    "delayMs": 800
+  },
+  "policy": {
+    "highValueThresholdUsd": 500,
+    "blockedCountries": [
+      "KP",
+      "IR"
+    ]
+  },
+  "integrations": {
+    "hedera": {
+      "mode": "relay",
+      "network": "testnet",
+      "relayUrl": ""
+    },
+    "chainlink": {
+      "mode": "webhook",
+      "webhookUrl": ""
+    },
+    "ledger": {
+      "mode": "external_approver",
+      "approverUrl": ""
+    },
+    "serviceProbe": {
+      "url": ""
+    }
+  },
+  "scenarios": [
+    {
+      "id": "api-microcall-us",
+      "name": "Agent pays for API micro-call (US destination)",
+      "payment": {
+        "amountUsd": 25,
+        "amountHbar": 0.5,
+        "recipientAccountId": "0.0.123456",
+        "destinationCountry": "US"
+      },
+      "workflowInput": {
+        "service": "api-quote",
+        "priority": "standard"
+      },
+      "retryPolicy": {
+        "retries": 2,
+        "delayMs": 600
+      }
+    },
+    {
+      "id": "compute-burst-eu",
+      "name": "Agent purchases compute burst (EU destination)",
+      "payment": {
+        "amountUsd": 300,
+        "amountHbar": 6.5,
+        "recipientAccountId": "0.0.123456",
+        "destinationCountry": "FR"
+      },
+      "workflowInput": {
+        "service": "gpu-burst",
+        "priority": "high"
+      }
+    },
+    {
+      "id": "high-value-trade-latam",
+      "name": "High-value agent settlement requiring Ledger policy approval",
+      "payment": {
+        "amountUsd": 1200,
+        "amountHbar": 24,
+        "recipientAccountId": "0.0.123456",
+        "destinationCountry": "BR"
+      },
+      "workflowInput": {
+        "service": "strategy-settlement",
+        "priority": "critical"
+      }
+    }
+  ]
+}

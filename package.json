@@ -1,0 +1,25 @@
+{
+  "name": "x402bench-agentic-payments",
+  "version": "1.0.0",
+  "description": "Benchmark suite for agentic pay-per-request commerce with Hedera, Chainlink CRE, and Ledger policy controls.",
+  "type": "module",
+  "main": "src/cli.js",
+  "scripts": {
+    "run": "node src/cli.js run --config config/benchmark.config.json",
+    "run:strict": "node src/cli.js run --config config/benchmark.config.json --strict",
+    "test": "node --test tests/*.test.js",
+    "check": "node src/cli.js validate --config config/benchmark.config.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "benchmark",
+    "x402",
+    "agentic-payments",
+    "hedera",
+    "chainlink",
+    "ledger"
+  ],
+  "license": "MIT"
+}
