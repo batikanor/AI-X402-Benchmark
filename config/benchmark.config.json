@@ -40,7 +40,7 @@
       "payment": {
         "amountUsd": 25,
         "amountHbar": 0.5,
-        "recipientAccountId": "0.0.123456",
+        "recipientAccountId": "0.0.8507020",
         "destinationCountry": "US"
       },
       "workflowInput": {
@@ -58,7 +58,7 @@
       "payment": {
         "amountUsd": 300,
         "amountHbar": 6.5,
-        "recipientAccountId": "0.0.123456",
+        "recipientAccountId": "0.0.8507020",
         "destinationCountry": "FR"
       },
       "workflowInput": {
@@ -72,7 +72,7 @@
       "payment": {
         "amountUsd": 1200,
         "amountHbar": 24,
-        "recipientAccountId": "0.0.123456",
+        "recipientAccountId": "0.0.8507020",
         "destinationCountry": "BR"
       },
       "workflowInput": {

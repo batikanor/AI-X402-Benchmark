@@ -28,5 +28,8 @@
     "chainlink",
     "ledger"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@hashgraph/sdk": "^2.81.0"
+  }
 }

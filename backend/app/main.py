@@ -124,6 +124,26 @@ class HealthResponse(BaseModel):
     llmTimeoutSeconds: int
 
 
+class ChainlinkWebhookRequest(BaseModel):
+    runId: str
+    scenarioId: str
+    workflowInput: dict[str, Any] = Field(default_factory=dict)
+
+
+class LedgerApproverRequest(BaseModel):
+    runId: str
+    scenarioId: str
+    amountUsd: float
+    challenge: str | None = None
+
+
+class ServiceProbeRequest(BaseModel):
+    runId: str
+    scenarioId: str
+    txHash: str | None = None
+    workflowId: str | None = None
+
+
 def _latest_report(directory: Path) -> Path | None:
     directory.mkdir(parents=True, exist_ok=True)
     candidates = [
@@ -534,6 +554,49 @@ def health() -> HealthResponse:
         workflowTimeoutSeconds=_timeout_seconds(),
         llmTimeoutSeconds=_llm_timeout_seconds(),
     )
+
+
+@app.post("/api/v1/integrations/chainlink/webhook")
+def chainlink_webhook(payload: ChainlinkWebhookRequest) -> dict[str, Any]:
+    priority = str(payload.workflowInput.get("priority", "standard")).lower()
+    simulated_delay_ms = 120 if priority == "critical" else (90 if priority == "high" else 60)
+    time.sleep(simulated_delay_ms / 1000)
+
+    return {
+        "workflowId": f"{payload.runId}-{payload.scenarioId}-wf",
+        "status": "completed",
+        "provider": "local-chainlink-webhook",
+        "latencyMs": simulated_delay_ms,
+        "receivedInput": payload.workflowInput,
+    }
+
+
+@app.post("/api/v1/integrations/ledger/approver")
+def ledger_approver(payload: LedgerApproverRequest) -> dict[str, Any]:
+    approval_id = f"ledger-approval-{payload.runId}-{payload.scenarioId}"
+    return {
+        "approved": True,
+        "approvalId": approval_id,
+        "approverRef": "local-ledger-policy-gate",
+        "amountUsd": payload.amountUsd,
+        "challenge": payload.challenge,
+    }
+
+
+@app.post("/api/v1/integrations/service-probe")
+def service_probe(payload: ServiceProbeRequest) -> dict[str, Any]:
+    if not payload.txHash or not payload.workflowId:
+        raise HTTPException(status_code=400, detail="Missing txHash or workflowId")
+
+    return {
+        "status": "ok",
+        "checkedAtEpochMs": int(time.time() * 1000),
+        "runId": payload.runId,
+        "scenarioId": payload.scenarioId,
+        "txHash": payload.txHash,
+        "workflowId": payload.workflowId,
+        "provider": "local-x402-service-probe",
+    }
 
 
 @app.get("/api/v1/alignment")
