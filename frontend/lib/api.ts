@@ -153,6 +153,7 @@ export interface ReadinessDashboardResponse {
   } | null;
   models: Array<{
     model: string;
+    paramsBillions: number | null;
     overallScore: number;
     decisionAccuracyPct: number;
     basePolicyAccuracyPct: number;

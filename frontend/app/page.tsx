@@ -11,12 +11,43 @@ import { fetchReadinessDashboard, runReadinessBenchmark } from "@/lib/api";
 type RuntimeMode = "ollama" | "openai_compat";
 
 const HF_OPENAI_COMPAT_URL = "https://router.huggingface.co/v1";
+const GEMMA4_VARIANTS = [
+  {
+    tag: "gemma4:e2b",
+    label: "E2B (edge)",
+    params: "2.3B effective (5.1B total)",
+    className: "Phone/edge first",
+  },
+  {
+    tag: "gemma4:e4b",
+    label: "E4B (edge)",
+    params: "4.5B effective (8.0B total)",
+    className: "Phone + laptop friendly",
+  },
+  {
+    tag: "gemma4:26b",
+    label: "26B A4B (MoE)",
+    params: "25.2B total (3.8B active)",
+    className: "Workstation/GPU",
+  },
+  {
+    tag: "gemma4:31b",
+    label: "31B dense",
+    params: "30.7B total",
+    className: "High-end workstation",
+  },
+];
 
 function metricLabel(value: number | undefined, suffix = ""): string {
   if (value === undefined || Number.isNaN(value)) {
     return "-";
   }
   return `${value.toFixed(2)}${suffix}`;
+}
+
+function paramsLabel(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  return value % 1 === 0 ? `${value.toFixed(0)}B` : `${value.toFixed(1)}B`;
 }
 
 function compactLog(text: string): string {
@@ -294,7 +325,7 @@ export default function HomePage() {
       if (result.ok) {
         if (updated?.latest && topModel) {
           setRunSummary(
-            `Readiness run completed. Leader ${topModel.model} with score ${metricLabel(topModel.overallScore)}. Decision accuracy ${metricLabel(topModel.decisionAccuracyPct, "%")}, docs grounded ${metricLabel(topModel.docsGroundingRatePct, "%")}, workflow success ${metricLabel(topModel.workflowSuccessRatePct, "%")}. Run ID ${updated.latest.runId}.`,
+            `Readiness run completed. Leader ${topModel.model} (${paramsLabel(topModel.paramsBillions)}) with score ${metricLabel(topModel.overallScore)}. Decision accuracy ${metricLabel(topModel.decisionAccuracyPct, "%")}, docs grounded ${metricLabel(topModel.docsGroundingRatePct, "%")}, workflow success ${metricLabel(topModel.workflowSuccessRatePct, "%")}. Run ID ${updated.latest.runId}.`,
           );
         } else {
           setRunSummary("Readiness run completed. Dashboard is refreshing.");
@@ -440,6 +471,42 @@ export default function HomePage() {
                   No Ollama models detected. Install at least 2 text models first.
                 </p>
               ) : null}
+
+              <Card className="space-y-3 bg-soft/50 p-4">
+                <p className="text-sm font-medium">Gemma 4 variants (latest official)</p>
+                <p className="text-xs text-slate-400">
+                  Use edge variants when you want a phone-capable comparison baseline.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="text-slate-300">
+                      <tr>
+                        <th className="px-2 py-2">Tag</th>
+                        <th className="px-2 py-2">Variant</th>
+                        <th className="px-2 py-2">Parameters</th>
+                        <th className="px-2 py-2">Fit class</th>
+                        <th className="px-2 py-2">Installed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {GEMMA4_VARIANTS.map((variant) => (
+                        <tr key={variant.tag} className="border-t border-white/10">
+                          <td className="px-2 py-2 font-mono text-[11px]">{variant.tag}</td>
+                          <td className="px-2 py-2">{variant.label}</td>
+                          <td className="px-2 py-2">{variant.params}</td>
+                          <td className="px-2 py-2">{variant.className}</td>
+                          <td className="px-2 py-2">
+                            {data?.availableModels.includes(variant.tag) ? "yes" : "no"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Install missing tags with <code>ollama pull gemma4:&lt;tag&gt;</code> (for example <code>ollama pull gemma4:e2b</code>).
+                </p>
+              </Card>
 
               <Card className="space-y-2 bg-soft/50 p-4">
                 <label htmlFor="custom-models" className="text-sm font-medium">
@@ -590,6 +657,7 @@ export default function HomePage() {
                 <thead className="text-slate-300">
                   <tr>
                     <th className="px-2 py-2">Model</th>
+                    <th className="px-2 py-2">Params (B)</th>
                     <th className="px-2 py-2">Overall</th>
                     <th className="px-2 py-2">Decision Accuracy %</th>
                     <th className="px-2 py-2">Base Policy %</th>
@@ -608,6 +676,7 @@ export default function HomePage() {
                   {sortedModels.map((row) => (
                     <tr key={row.model} className="border-t border-white/10">
                       <td className="px-2 py-2">{row.model}</td>
+                      <td className="px-2 py-2">{paramsLabel(row.paramsBillions)}</td>
                       <td className="px-2 py-2">{metricLabel(row.overallScore)}</td>
                       <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.basePolicyAccuracyPct)}</td>
@@ -624,7 +693,7 @@ export default function HomePage() {
                   ))}
                   {!sortedModels.length && !isLoading ? (
                     <tr>
-                      <td className="px-2 py-3 text-slate-400" colSpan={13}>
+                      <td className="px-2 py-3 text-slate-400" colSpan={14}>
                         No readiness benchmark results yet.
                       </td>
                     </tr>

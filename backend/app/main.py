@@ -26,6 +26,8 @@ READINESS_DEFAULT_DOCS_PACK_PATH = PROJECT_ROOT / "readiness_bench" / "docs_cach
 
 MODEL_NAME_REGEX = re.compile(r"^[A-Za-z0-9._:/-]+$")
 ENV_NAME_REGEX = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+MODEL_PARAM_REGEX = re.compile(r"parameters\s+([0-9]+(?:\.[0-9]+)?)B", re.IGNORECASE)
+NAME_PARAM_REGEX = re.compile(r"([0-9]+(?:\.[0-9]+)?)b", re.IGNORECASE)
 
 RUN_COND = threading.Condition()
 RUN_IN_PROGRESS = False
@@ -38,6 +40,7 @@ IDEMPOTENCY_CACHE: dict[str, dict[str, Any]] = {}
 LLM_IDEMPOTENCY_CACHE: dict[str, dict[str, Any]] = {}
 READINESS_IDEMPOTENCY_CACHE: dict[str, dict[str, Any]] = {}
 IDEMPOTENCY_TTL_SECONDS = 15 * 60
+MODEL_PARAM_CACHE: dict[str, float | None] = {}
 
 
 def _load_dotenv() -> None:
@@ -425,6 +428,40 @@ def _recommended_models(models: list[str]) -> list[str]:
     return base[:6]
 
 
+def _parse_model_param_from_name(model: str) -> float | None:
+    values = [float(item) for item in NAME_PARAM_REGEX.findall(model)]
+    if not values:
+        return None
+    return max(values)
+
+
+def _model_param_size_billions(model: str) -> float | None:
+    if model in MODEL_PARAM_CACHE:
+        return MODEL_PARAM_CACHE[model]
+
+    value: float | None = None
+    try:
+        process = subprocess.run(
+            ["ollama", "show", model],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=12,
+        )
+        if process.returncode == 0:
+            match = MODEL_PARAM_REGEX.search(process.stdout)
+            if match:
+                value = float(match.group(1))
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        value = None
+
+    if value is None:
+        value = _parse_model_param_from_name(model)
+
+    MODEL_PARAM_CACHE[model] = value
+    return value
+
+
 def _build_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:
     summary = report.get("summary", {})
     scoring = report.get("scoring", {})
@@ -639,6 +676,17 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
     summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
     model_rows = summary.get("models", []) if isinstance(summary.get("models"), list) else []
     raw_results = report.get("results", []) if isinstance(report.get("results"), list) else []
+    model_rows_with_params = []
+    for row in model_rows:
+        if not isinstance(row, dict):
+            continue
+        model_name = str(row.get("model", ""))
+        model_rows_with_params.append(
+            {
+                **row,
+                "paramsBillions": _model_param_size_billions(model_name),
+            }
+        )
 
     trimmed_results = []
     for item in raw_results:
@@ -697,7 +745,7 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
             "docs": meta.get("docs", {}),
             "totalEvaluations": summary.get("totalEvaluations", 0),
         },
-        "models": model_rows,
+        "models": model_rows_with_params,
         "results": trimmed_results,
         "scenarios": templates,
     }

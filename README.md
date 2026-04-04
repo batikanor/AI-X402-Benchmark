@@ -29,6 +29,7 @@ x402Bench provides one integrated readiness benchmark and scorecard.
 - Runtime abstraction: local Ollama or OpenAI-compatible APIs (including Hugging Face Router)
 - Hard readiness suite with adversarial/policy-edge cases to avoid inflated 100% scores
 - Documentation-grounded evaluation with user-selectable official source packs and citation scoring
+- Leaderboard includes per-model parameter size (billions) for edge/mobile model comparison
 
 ## Standards and Best-Practice Alignment
 
@@ -153,6 +154,20 @@ node scripts/run_llm_readiness_benchmark.mjs \
 ```
 
 Outputs are written to `readiness_bench/results/*.json` and `readiness_bench/results/*.md`.
+
+## Gemma 4 variants (latest official)
+
+According to Google’s Gemma 4 model card, the four variants are:
+- `gemma4:e2b` (E2B): 2.3B effective (5.1B with embeddings)
+- `gemma4:e4b` (E4B): 4.5B effective (8.0B with embeddings)
+- `gemma4:26b` (26B A4B MoE): 25.2B total (3.8B active)
+- `gemma4:31b` (31B dense): 30.7B total
+
+If a variant is missing locally, pull it with:
+
+```bash
+ollama pull gemma4:e2b
+```
 
 ## Deployability Modes
 
