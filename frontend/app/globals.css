@@ -10,12 +10,12 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 15% 20%, rgba(43, 212, 189, 0.18), transparent 45%),
-    radial-gradient(circle at 80% 10%, rgba(110, 231, 255, 0.16), transparent 42%),
-    radial-gradient(circle at 70% 90%, rgba(45, 94, 194, 0.2), transparent 44%),
-    #0b1020;
+    radial-gradient(circle at 18% 16%, rgba(45, 201, 163, 0.2), transparent 44%),
+    radial-gradient(circle at 82% 10%, rgba(104, 229, 200, 0.16), transparent 40%),
+    radial-gradient(circle at 52% 88%, rgba(20, 98, 80, 0.22), transparent 45%),
+    linear-gradient(to bottom, #001f1e, #001210);
   color: #e6edf6;
-  font-family: "Sora", "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: "Sora", "Geist", "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 * {
@@ -23,16 +23,16 @@ body {
 }
 
 ::selection {
-  background: rgba(110, 231, 255, 0.28);
+  background: rgba(104, 229, 200, 0.28);
 }
 
 .data-table th {
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #9eb0cd;
+  color: #9fc1b8;
 }
 
 .data-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(255, 255, 255, 0.02);
 }

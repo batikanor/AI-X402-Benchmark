@@ -8,7 +8,6 @@ import {
   ChevronDown,
   Cpu,
   Gauge,
-  ListChecks,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -23,9 +22,13 @@ import { Card } from "@/components/ui/card";
 import { fetchReadinessDashboard, runReadinessBenchmark, type ReadinessDashboardResponse } from "@/lib/api";
 
 type RuntimeMode = "ollama" | "openai_compat";
+type SponsorKey = "Hedera" | "Chainlink" | "Ledger";
 type ReadinessResult = ReadinessDashboardResponse["results"][number];
+type ReadinessScenario = ReadinessDashboardResponse["scenarios"][number];
 
 const HF_OPENAI_COMPAT_URL = "https://router.huggingface.co/v1";
+const SPONSORS: SponsorKey[] = ["Hedera", "Chainlink", "Ledger"];
+
 const GEMMA4_VARIANTS = [
   {
     tag: "gemma4:e2b",
@@ -52,6 +55,7 @@ const GEMMA4_VARIANTS = [
     className: "High-end workstation",
   },
 ];
+
 const MODEL_PRESETS = [
   {
     id: "phone",
@@ -70,40 +74,6 @@ const MODEL_PRESETS = [
   },
 ];
 
-function metricLabel(value: number | undefined, suffix = ""): string {
-  if (value === undefined || Number.isNaN(value)) {
-    return "-";
-  }
-  return `${value.toFixed(2)}${suffix}`;
-}
-
-function paramsLabel(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "-";
-  return value % 1 === 0 ? `${value.toFixed(0)}B` : `${value.toFixed(1)}B`;
-}
-
-function compactLog(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return "";
-  }
-  if (trimmed.length <= 5000) {
-    return trimmed;
-  }
-  return `${trimmed.slice(0, 5000)}\n...[truncated]`;
-}
-
-function formatDateTime(value: string | undefined): string {
-  if (!value) {
-    return "-";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toLocaleString();
-}
-
 type DisclosureProps = {
   title: string;
   subtitle?: string;
@@ -111,9 +81,31 @@ type DisclosureProps = {
   defaultOpen?: boolean;
 };
 
+type MissingIntegration = {
+  integration: string;
+  mode?: string;
+  reason: string;
+  required: string;
+};
+
+type HumanTask = {
+  label: string;
+  passed: boolean;
+  detail: string;
+};
+
+type SponsorAggregate = {
+  sponsor: SponsorKey;
+  cases: number;
+  decisionAccuracyPct: number;
+  docsGroundedPct: number;
+  executionSignalPct: number;
+  sponsorScore: number;
+};
+
 function Disclosure({ title, subtitle, children, defaultOpen = false }: DisclosureProps) {
   return (
-    <details open={defaultOpen} className="group rounded-2xl border border-white/10 bg-soft/35 p-4 backdrop-blur-sm">
+    <details open={defaultOpen} className="group rounded-2xl border border-white/10 bg-soft/40 p-4 backdrop-blur-sm">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
         <div>
           <p className="text-sm font-semibold text-slate-100">{title}</p>
@@ -126,12 +118,37 @@ function Disclosure({ title, subtitle, children, defaultOpen = false }: Disclosu
   );
 }
 
-type MissingIntegration = {
-  integration: string;
-  mode?: string;
-  reason: string;
-  required: string;
-};
+function metricLabel(value: number | undefined, suffix = ""): string {
+  if (value === undefined || Number.isNaN(value)) return "-";
+  return `${value.toFixed(2)}${suffix}`;
+}
+
+function paramsLabel(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  return value % 1 === 0 ? `${value.toFixed(0)}B` : `${value.toFixed(1)}B`;
+}
+
+function formatDateTime(value: string | undefined): string {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
+}
+
+function compactLog(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= 5000) return trimmed;
+  return `${trimmed.slice(0, 5000)}\n...[truncated]`;
+}
+
+function parseModelCsv(value: string): string[] {
+  const items = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return Array.from(new Set(items)).slice(0, 8);
+}
 
 function normalizeWorkflowStatus(status: string | undefined): string {
   const value = String(status || "").toLowerCase();
@@ -143,17 +160,14 @@ function normalizeWorkflowStatus(status: string | undefined): string {
   return value || "unknown";
 }
 
+function joinList(values: string[] | undefined): string {
+  const clean = (values ?? []).map((item) => String(item || "").trim()).filter(Boolean);
+  return clean.length ? clean.join(", ") : "none";
+}
+
 function rowTopIssue(notes: string[]): string {
   if (!notes.length) return "No note";
   return notes[0];
-}
-
-function parseModelCsv(value: string): string[] {
-  const items = value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return Array.from(new Set(items)).slice(0, 8);
 }
 
 function toneForRate(value: number | undefined): string {
@@ -163,19 +177,44 @@ function toneForRate(value: number | undefined): string {
   return "text-rose-300";
 }
 
-type HumanTask = {
-  label: string;
-  passed: boolean;
-  detail: string;
-};
+function statusChipTone(status: string | undefined): string {
+  const normalized = normalizeWorkflowStatus(status);
+  if (normalized === "success") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (normalized === "failed") return "border-rose-300/30 bg-rose-300/10 text-rose-200";
+  if (normalized === "blocked" || normalized === "decision mismatch") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-white/20 bg-white/10 text-slate-200";
+}
 
 function passLabel(value: boolean): string {
   return value ? "pass" : "fail";
 }
 
-function joinList(values: string[] | undefined): string {
-  const clean = (values ?? []).map((item) => String(item || "").trim()).filter(Boolean);
-  return clean.length ? clean.join(", ") : "none";
+function caseSponsors(caseDef: ReadinessScenario | undefined, fallbackExecutionMode: string): SponsorKey[] {
+  const rawSources = caseDef?.requiredSources ?? [];
+  const sourceIds = rawSources.map((id) => String(id || "").toLowerCase());
+  const set = new Set<SponsorKey>();
+
+  if (sourceIds.some((id) => id.includes("hedera"))) set.add("Hedera");
+  if (sourceIds.some((id) => id.includes("chainlink"))) set.add("Chainlink");
+  if (sourceIds.some((id) => id.includes("ledger") || id.includes("eip-712") || id.includes("eip-7730"))) {
+    set.add("Ledger");
+  }
+
+  // Real execution cases touch all three integrations in this benchmark architecture.
+  const executionMode = String(caseDef?.executionMode || fallbackExecutionMode || "").toLowerCase();
+  if (executionMode === "real") {
+    set.add("Hedera");
+    set.add("Chainlink");
+    set.add("Ledger");
+  }
+
+  if (!set.size) {
+    set.add("Hedera");
+    set.add("Chainlink");
+    set.add("Ledger");
+  }
+
+  return Array.from(set);
 }
 
 function buildHumanTaskChecklist(result: ReadinessResult): HumanTask[] {
@@ -189,7 +228,7 @@ function buildHumanTaskChecklist(result: ReadinessResult): HumanTask[] {
       ? {
           label: "Run execution path",
           passed: true,
-          detail: "Case is configured as decision_only, so onchain execution is intentionally skipped.",
+          detail: "Case is decision-only, so execution is intentionally skipped.",
         }
       : {
           label: "Run execution path",
@@ -203,12 +242,10 @@ function buildHumanTaskChecklist(result: ReadinessResult): HumanTask[] {
     {
       label: "Return parseable structured output",
       passed: Boolean(result.llm.parseOk),
-      detail: result.llm.parseOk
-        ? "Model output parsed successfully."
-        : result.llm.error || "Output parser could not read a valid response payload.",
+      detail: result.llm.parseOk ? "Model output parsed successfully." : result.llm.error || "Could not parse valid JSON response.",
     },
     {
-      label: "Choose the correct decision (allow/block)",
+      label: "Choose correct allow/block decision",
       passed: Boolean(result.evaluation.decisionMatch),
       detail: `Expected ${result.expected.decision}; model returned ${result.llm.decision || "unknown"}.`,
     },
@@ -243,11 +280,11 @@ function buildHumanTaskChecklist(result: ReadinessResult): HumanTask[] {
       detail: `${result.evaluation.validCitationCount ?? 0}/${result.evaluation.citationCount ?? 0} citations valid (${metricLabel(result.evaluation.citationValidityPct)}%).`,
     },
     {
-      label: "Be eligible for execution",
+      label: "Pass execution eligibility gate",
       passed: Boolean(result.evaluation.executionEligible),
       detail: result.evaluation.executionEligible
-        ? "Decision matched policy gates and execution path was allowed."
-        : "Decision/gating mismatch made this case non-executable.",
+        ? "Decision satisfied policy checks and became executable."
+        : "Decision mismatch blocked execution path.",
     },
     workflowTask,
   ];
@@ -270,6 +307,7 @@ export default function HomePage() {
   const [running, setRunning] = useState(false);
   const [runSummary, setRunSummary] = useState("");
   const [runTechnicalLog, setRunTechnicalLog] = useState("");
+  const [activeModel, setActiveModel] = useState("");
 
   useEffect(() => {
     if (!data?.availableModels.length) return;
@@ -304,6 +342,7 @@ export default function HomePage() {
       return a.avgTotalLatencyMs - b.avgTotalLatencyMs;
     });
   }, [data?.models]);
+
   const modelParamsByName = useMemo(() => {
     const map = new Map<string, number | null>();
     for (const row of data?.models ?? []) {
@@ -311,6 +350,16 @@ export default function HomePage() {
     }
     return map;
   }, [data?.models]);
+
+  useEffect(() => {
+    if (!sortedModels.length) {
+      setActiveModel("");
+      return;
+    }
+    if (!activeModel || !sortedModels.some((row) => row.model === activeModel)) {
+      setActiveModel(sortedModels[0].model);
+    }
+  }, [sortedModels, activeModel]);
 
   const leader = sortedModels[0];
 
@@ -324,10 +373,7 @@ export default function HomePage() {
         integration: "Hedera",
         mode: status.hedera.mode,
         reason: status.hedera.reason,
-        required:
-          status.hedera.mode === "sdk"
-            ? "HEDERA_OPERATOR_ID + HEDERA_OPERATOR_KEY"
-            : "HEDERA_RELAY_URL",
+        required: status.hedera.mode === "sdk" ? "HEDERA_OPERATOR_ID + HEDERA_OPERATOR_KEY" : "HEDERA_RELAY_URL",
       });
     }
     if (!status.chainlink.configured) {
@@ -335,8 +381,7 @@ export default function HomePage() {
         integration: "Chainlink",
         mode: status.chainlink.mode,
         reason: status.chainlink.reason,
-        required:
-          status.chainlink.mode === "cli" ? "CHAINLINK_MODE=cli" : "CHAINLINK_WEBHOOK_URL",
+        required: status.chainlink.mode === "cli" ? "CHAINLINK_MODE=cli" : "CHAINLINK_WEBHOOK_URL",
       });
     }
     if (!status.ledger.configured) {
@@ -344,8 +389,7 @@ export default function HomePage() {
         integration: "Ledger",
         mode: status.ledger.mode,
         reason: status.ledger.reason,
-        required:
-          status.ledger.mode === "ledger_hw" ? "LEDGER_MODE=ledger_hw" : "LEDGER_APPROVER_URL",
+        required: status.ledger.mode === "ledger_hw" ? "LEDGER_MODE=ledger_hw" : "LEDGER_APPROVER_URL",
       });
     }
     if (!status.serviceProbe.configured) {
@@ -391,29 +435,13 @@ export default function HomePage() {
     return lines.join("\n");
   }, [missingIntegrations]);
 
-  const scenarioRows = useMemo(() => {
-    const scenarios = data?.scenarios ?? [];
-    const results = data?.results ?? [];
+  const effectiveModels = useMemo(() => {
+    const parsed = parseModelCsv(customModels);
+    if (parsed.length) return parsed;
+    return selectedModels;
+  }, [customModels, selectedModels]);
 
-    return scenarios.map((scenario) => {
-      const byModel = sortedModels.map((modelRow) => {
-        const attemptRows = results
-          .filter((row) => (row.caseId ?? row.scenarioId) === scenario.id && row.model === modelRow.model)
-          .sort((a, b) => b.attempt - a.attempt);
-        return {
-          model: modelRow.model,
-          latest: attemptRows[0] ?? null,
-        };
-      });
-
-      return {
-        scenario,
-        byModel,
-      };
-    });
-  }, [data?.results, data?.scenarios, sortedModels]);
-
-  const taskAuditRows = useMemo(() => {
+  const latestResultRows = useMemo(() => {
     const results = data?.results ?? [];
     const latestByModelCase = new Map<string, ReadinessResult>();
     for (const item of results) {
@@ -423,31 +451,98 @@ export default function HomePage() {
         latestByModelCase.set(key, item);
       }
     }
-
-    return Array.from(latestByModelCase.values()).sort((a, b) => {
-      if (a.model !== b.model) return a.model.localeCompare(b.model);
-      if (a.caseName !== b.caseName) return a.caseName.localeCompare(b.caseName);
-      return a.attempt - b.attempt;
-    });
+    return Array.from(latestByModelCase.values());
   }, [data?.results]);
 
-  const effectiveModels = useMemo(() => {
-    const parsed = parseModelCsv(customModels);
-    if (parsed.length) return parsed;
-    return selectedModels;
-  }, [customModels, selectedModels]);
+  const scenarioById = useMemo(() => {
+    const map = new Map<string, ReadinessScenario>();
+    for (const scenario of data?.scenarios ?? []) {
+      map.set(scenario.id, scenario);
+    }
+    return map;
+  }, [data?.scenarios]);
+
+  const sponsorBreakdownByModel = useMemo(() => {
+    const byModel = new Map<string, SponsorAggregate[]>();
+
+    for (const modelRow of sortedModels) {
+      const modelRows = latestResultRows.filter((row) => row.model === modelRow.model);
+      const sponsorRows: SponsorAggregate[] = [];
+
+      for (const sponsor of SPONSORS) {
+        const scoped = modelRows.filter((row) => {
+          const scenario = scenarioById.get(row.caseId) || scenarioById.get(row.scenarioId);
+          return caseSponsors(scenario, row.executionMode).includes(sponsor);
+        });
+
+        if (!scoped.length) {
+          sponsorRows.push({
+            sponsor,
+            cases: 0,
+            decisionAccuracyPct: 0,
+            docsGroundedPct: 0,
+            executionSignalPct: 0,
+            sponsorScore: 0,
+          });
+          continue;
+        }
+
+        const decisionAccuracyPct = scoped.reduce((acc, row) => acc + (row.evaluation.accuracyPct ?? 0), 0) / scoped.length;
+        const docsGroundedPct =
+          (scoped.filter((row) => row.evaluation.docsGrounded).length / scoped.length) * 100;
+
+        const executed = scoped.filter((row) => row.workflow.executed);
+        const executionSignalPct = executed.length
+          ? (executed.filter((row) => normalizeWorkflowStatus(row.workflow.status) === "success").length / executed.length) * 100
+          : (scoped.reduce((acc, row) => acc + (row.evaluation.executionEligible ? 100 : 0), 0) / scoped.length);
+
+        const sponsorScore =
+          decisionAccuracyPct * 0.5 +
+          docsGroundedPct * 0.3 +
+          executionSignalPct * 0.2;
+
+        sponsorRows.push({
+          sponsor,
+          cases: scoped.length,
+          decisionAccuracyPct,
+          docsGroundedPct,
+          executionSignalPct,
+          sponsorScore,
+        });
+      }
+
+      byModel.set(modelRow.model, sponsorRows);
+    }
+
+    return byModel;
+  }, [sortedModels, latestResultRows, scenarioById]);
+
+  const activeModelRow = useMemo(
+    () => sortedModels.find((row) => row.model === activeModel) ?? null,
+    [sortedModels, activeModel],
+  );
+
+  const activeModelSponsorRows = useMemo(
+    () => sponsorBreakdownByModel.get(activeModel ?? "") ?? [],
+    [sponsorBreakdownByModel, activeModel],
+  );
+
+  const activeModelCaseRows = useMemo(() => {
+    return latestResultRows
+      .filter((row) => row.model === activeModel)
+      .sort((a, b) => a.caseName.localeCompare(b.caseName));
+  }, [latestResultRows, activeModel]);
+
   const integrationsReady = data?.track.integrationStatus?.isFullyConfigured ?? false;
   const runStatusTone = integrationsReady ? "text-emerald-200" : "text-amber-200";
-  const runStatusLabel = integrationsReady ? "Integrations ready for explicit external endpoints." : "Using local integration fallbacks for missing explicit endpoints.";
+  const runStatusLabel = integrationsReady
+    ? "Explicit integration endpoints are configured."
+    : "Using local integration fallbacks where explicit endpoints are missing.";
 
   function toggleModelSelection(model: string) {
     setSelectedModels((previous) => {
-      if (previous.includes(model)) {
-        return previous.filter((item) => item !== model);
-      }
-      if (previous.length >= 8) {
-        return previous;
-      }
+      if (previous.includes(model)) return previous.filter((item) => item !== model);
+      if (previous.length >= 8) return previous;
       return [...previous, model];
     });
   }
@@ -456,14 +551,12 @@ export default function HomePage() {
     const available = data?.availableModels ?? [];
     const eligible = models.filter((item) => available.includes(item)).slice(0, 8);
     if (eligible.length < 2) {
-      setRunSummary(
-        `Preset "${label}" needs at least 2 installed models. Install missing models and try again.`,
-      );
+      setRunSummary(`Preset "${label}" needs at least 2 installed models. Install missing models and retry.`);
       return;
     }
     setCustomModels("");
     setSelectedModels(eligible);
-    setRunSummary(`Preset "${label}" loaded with models: ${eligible.join(", ")}.`);
+    setRunSummary(`Preset "${label}" loaded: ${eligible.join(", ")}.`);
   }
 
   async function handleRun() {
@@ -496,17 +589,17 @@ export default function HomePage() {
       if (result.ok) {
         if (updated?.latest && topModel) {
           setRunSummary(
-            `Readiness run completed. Leader ${topModel.model} (${paramsLabel(topModel.paramsBillions)}) with score ${metricLabel(topModel.overallScore)}. Decision accuracy ${metricLabel(topModel.decisionAccuracyPct, "%")}, docs grounded ${metricLabel(topModel.docsGroundingRatePct, "%")}, workflow success ${metricLabel(topModel.workflowSuccessRatePct, "%")}. Run ID ${updated.latest.runId}.`,
+            `Run completed. Leader ${topModel.model} (${paramsLabel(topModel.paramsBillions)}) | Score ${metricLabel(topModel.overallScore)} | Decision ${metricLabel(topModel.decisionAccuracyPct, "%")} | Workflow ${metricLabel(topModel.workflowSuccessRatePct, "%")} | Run ${updated.latest.runId}.`,
           );
         } else {
-          setRunSummary("Readiness run completed. Dashboard is refreshing.");
+          setRunSummary("Run completed. Dashboard is refreshing.");
         }
       } else {
-        setRunSummary(`Readiness run not completed (code ${result.returnCode}). Check technical logs.`);
+        setRunSummary(`Run not completed (code ${result.returnCode}). Open Technical logs.`);
       }
     } catch (runError) {
       const message = runError instanceof Error ? runError.message : String(runError);
-      setRunSummary(`Readiness run failed: ${message}`);
+      setRunSummary(`Run failed: ${message}`);
       setRunTechnicalLog(compactLog(message));
     } finally {
       setRunning(false);
@@ -516,21 +609,21 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
       <section className="mb-6">
-        <Card className="relative overflow-hidden border-cyan-300/20 bg-gradient-to-br from-[#111a33]/95 via-[#0f1930]/95 to-[#122347]/95 p-6 md:p-8">
-          <div className="pointer-events-none absolute -right-12 -top-14 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-8 h-56 w-56 rounded-full bg-emerald-400/10 blur-3xl" />
+        <Card className="relative overflow-hidden border-[#2bb89a]/20 bg-gradient-to-br from-[#0a2d28]/95 via-[#062823]/95 to-[#041d1a]/95 p-6 md:p-8">
+          <div className="pointer-events-none absolute -right-12 -top-14 h-56 w-56 rounded-full bg-[#23c19f]/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-8 h-56 w-56 rounded-full bg-[#1a7f6b]/15 blur-3xl" />
           <div className="relative z-10 flex flex-wrap items-start justify-between gap-5">
             <div className="space-y-3">
-              <Badge className="gap-1 border-cyan-300/35 bg-cyan-300/10 text-cyan-100">
+              <Badge className="gap-1 border-[#35cda7]/35 bg-[#35cda7]/10 text-[#97f2dc]">
                 <Sparkles size={12} />
-                Cannes Final Build
+                Final Presentation UI
               </Badge>
               <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">x402Bench LLM Readiness</h1>
               <p className="max-w-4xl text-sm text-slate-200 md:text-[15px]">
-                A single integrated benchmark for judging-ready demos: model decision quality, documentation-grounded policy correctness, and workflow execution reliability in one scoreboard.
+                One integrated benchmark with two levels of reading: a global leaderboard for fast ranking, and one-click model deep dives for detailed judging.
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
-                {(data?.project.sponsors ?? ["Hedera", "Chainlink", "Ledger"]).map((sponsor) => (
+                {(data?.project.sponsors ?? SPONSORS).map((sponsor) => (
                   <Badge key={sponsor} className="border-white/25 bg-white/10 text-white">
                     {sponsor}
                   </Badge>
@@ -543,26 +636,6 @@ export default function HomePage() {
               <p className="mt-1 text-xs text-slate-400">{formatDateTime(data?.latest?.finishedAt)}</p>
               <p className={`mt-3 text-xs ${runStatusTone}`}>{runStatusLabel}</p>
             </div>
-          </div>
-          <div className="relative z-10 mt-6 grid gap-3 md:grid-cols-2">
-            <Card className="border-fuchsia-300/20 bg-fuchsia-500/10 p-4">
-              <div className="mb-2 flex items-center gap-2 text-fuchsia-100">
-                <Brain size={16} />
-                <p className="font-semibold">Dimension A: Decision Quality</p>
-              </div>
-              <p className="text-sm text-slate-200">
-                Measures structured decision correctness: allow/block, approval gate, priority, risk level, control selection, and documentation grounding.
-              </p>
-            </Card>
-            <Card className="border-cyan-300/20 bg-cyan-500/10 p-4">
-              <div className="mb-2 flex items-center gap-2 text-cyan-100">
-                <Workflow size={16} />
-                <p className="font-semibold">Dimension B: Execution Reliability</p>
-              </div>
-              <p className="text-sm text-slate-200">
-                Runs eligible scenarios through Chainlink orchestration, Hedera settlement, and Ledger checks, then scores reliability and latency.
-              </p>
-            </Card>
           </div>
         </Card>
       </section>
@@ -577,40 +650,6 @@ export default function HomePage() {
 
       <section className="space-y-6">
         <Card className="space-y-6 border-white/15 bg-panel/95 p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-2">
-              <Badge className="border-white/20 bg-white/10 text-white">Integrated Benchmark</Badge>
-              <h2 className="text-2xl font-semibold">LLM Readiness for Payment Workflows</h2>
-              <p className="max-w-3xl text-sm text-slate-300">
-                {data?.track.whatIsBenchmarked ??
-                  "Whether models make correct policy/routing decisions and whether those decisions execute successfully through sponsor integrations."}
-              </p>
-              <div className="flex flex-wrap gap-2 text-xs">
-                <Badge className="border-white/20 bg-white/5 text-white">Mocked: {data?.track.mocked === false ? "No" : "Unknown"}</Badge>
-                <Badge className="border-white/20 bg-white/5 text-white">Cases: {data?.track.scenarioCount ?? "-"}</Badge>
-                <Badge className="border-white/20 bg-white/5 text-white">Runtime: {data?.latest?.runtime ?? data?.track.runtimeUsed ?? "-"}</Badge>
-                <Badge className="border-white/20 bg-white/5 text-white">
-                  Suite: {data?.track.suiteName ?? "-"} v{data?.track.suiteVersion ?? "-"}
-                </Badge>
-                <Badge className="border-white/20 bg-white/5 text-white">
-                  Docs grounding: {data?.track.docs?.enabled ? "On" : "Off"}
-                </Badge>
-                <Badge className="border-white/20 bg-white/5 text-white">
-                  Docs sources: {data?.latest?.docs?.sourceCount ?? data?.track.docs?.sourceCount ?? 0}
-                </Badge>
-                <Badge className="border-white/20 bg-white/5 text-white">
-                  Integrations ready: {data?.track.integrationStatus?.isFullyConfigured ? "Yes" : "Partial"}
-                </Badge>
-              </div>
-              <p className="text-xs text-slate-400">{data?.track.statusNote}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-soft/60 px-4 py-3 text-sm">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Latest Run ID</p>
-              <p className="font-medium text-slate-100">{data?.latest?.runId ?? "No run yet"}</p>
-              <p className="mt-1 text-xs text-slate-400">{formatDateTime(data?.latest?.finishedAt)}</p>
-            </div>
-          </div>
-
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <div className="space-y-4">
               <div className="space-y-1">
@@ -628,7 +667,7 @@ export default function HomePage() {
                 </select>
               </div>
 
-              <Card className="space-y-3 bg-soft/50 p-4">
+              <Card className="space-y-3 border-[#2fc7a3]/20 bg-soft/55 p-4">
                 <div className="flex items-center gap-2 text-sm font-medium text-slate-100">
                   <Cpu size={15} />
                   Quick model presets
@@ -639,15 +678,13 @@ export default function HomePage() {
                       key={preset.id}
                       type="button"
                       onClick={() => applyModelPreset(preset.models, preset.label)}
-                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-cyan-200/50 hover:bg-cyan-300/10"
+                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-[#3ce2bb]/50 hover:bg-[#3ce2bb]/10"
                     >
                       {preset.label}
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-slate-400">
-                  Presets select only currently installed models. Install missing models to unlock full packs.
-                </p>
+                <p className="text-xs text-slate-400">Presets only apply installed models.</p>
               </Card>
 
               <p className="text-sm font-medium">Select models to benchmark (2 to 8)</p>
@@ -659,14 +696,12 @@ export default function HomePage() {
                     <label
                       key={model}
                       className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
-                        checked ? "border-accent bg-accent/15" : "border-white/15 bg-soft/60"
+                        checked ? "border-[#2fc7a3] bg-[#2fc7a3]/12" : "border-white/15 bg-soft/60"
                       }`}
                     >
                       <span className="truncate pr-2">
                         {model}
-                        <span className="ml-2 text-xs text-slate-400">
-                          {paramsLabel(modelParamsByName.get(model))}
-                        </span>
+                        <span className="ml-2 text-xs text-slate-400">{paramsLabel(modelParamsByName.get(model))}</span>
                       </span>
                       <span className="flex items-center gap-2">
                         {recommended ? <Badge className="border-white/20 bg-white/10 text-white">recommended</Badge> : null}
@@ -674,7 +709,7 @@ export default function HomePage() {
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleModelSelection(model)}
-                          className="h-4 w-4 accent-cyan-400"
+                          className="h-4 w-4 accent-[#2fc7a3]"
                         />
                       </span>
                     </label>
@@ -682,16 +717,11 @@ export default function HomePage() {
                 })}
               </div>
               {!data?.availableModels.length && !isLoading && runtime === "ollama" ? (
-                <p className="text-xs text-amber-200">
-                  No Ollama models detected. Install at least 2 text models first.
-                </p>
+                <p className="text-xs text-amber-200">No Ollama models detected. Install at least 2 text models first.</p>
               ) : null}
 
-              <Card className="space-y-3 bg-soft/50 p-4">
+              <Card className="space-y-3 bg-soft/55 p-4">
                 <p className="text-sm font-medium">Gemma 4 variants (latest official)</p>
-                <p className="text-xs text-slate-400">
-                  Use edge variants when you want a phone-capable comparison baseline.
-                </p>
                 <div className="overflow-x-auto">
                   <table className="data-table min-w-full text-left text-xs">
                     <thead className="text-slate-300">
@@ -710,22 +740,17 @@ export default function HomePage() {
                           <td className="px-2 py-2">{variant.label}</td>
                           <td className="px-2 py-2">{variant.params}</td>
                           <td className="px-2 py-2">{variant.className}</td>
-                          <td className="px-2 py-2">
-                            {data?.availableModels.includes(variant.tag) ? "yes" : "no"}
-                          </td>
+                          <td className="px-2 py-2">{data?.availableModels.includes(variant.tag) ? "yes" : "no"}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-slate-500">
-                  Install missing tags with <code>ollama pull gemma4:&lt;tag&gt;</code> (for example <code>ollama pull gemma4:e2b</code>).
-                </p>
               </Card>
 
-              <Card className="space-y-2 bg-soft/50 p-4">
+              <Card className="space-y-2 bg-soft/55 p-4">
                 <label htmlFor="custom-models" className="text-sm font-medium">
-                  Custom model list (comma-separated, overrides checkbox selection when filled)
+                  Custom model list (comma-separated)
                 </label>
                 <input
                   id="custom-models"
@@ -738,7 +763,7 @@ export default function HomePage() {
               </Card>
 
               {runtime === "openai_compat" ? (
-                <Card className="space-y-3 bg-soft/50 p-4">
+                <Card className="space-y-3 bg-soft/55 p-4">
                   <div className="space-y-1">
                     <label htmlFor="api-base-url" className="text-sm font-medium">
                       OpenAI-compatible base URL
@@ -763,13 +788,10 @@ export default function HomePage() {
                       className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
                     />
                   </div>
-                  <p className="text-xs text-slate-400">
-                    For Hugging Face Router, set <code>HF_TOKEN</code> and use <code>{HF_OPENAI_COMPAT_URL}</code>.
-                  </p>
                 </Card>
               ) : null}
 
-              <Card className="space-y-3 bg-soft/50 p-4">
+              <Card className="space-y-3 bg-soft/55 p-4">
                 <p className="text-sm font-medium">Documentation grounding</p>
                 <div className="space-y-1">
                   <label htmlFor="docs-pack-path" className="text-sm font-medium">
@@ -805,20 +827,17 @@ export default function HomePage() {
                     type="checkbox"
                     checked={requireCitations}
                     onChange={(event) => setRequireCitations(event.target.checked)}
-                    className="h-4 w-4 accent-cyan-400"
+                    className="h-4 w-4 accent-[#2fc7a3]"
                   />
                   Require citation coverage for passing
                 </label>
-                <p className="text-xs text-slate-400">
-                  Use <code>scripts/build_docs_pack.mjs</code> with <code>readiness_bench/docs_sources/default_sources.json</code> to refresh from official docs.
-                </p>
               </Card>
             </div>
 
-            <Card className="space-y-4 border-cyan-200/20 bg-gradient-to-br from-cyan-300/10 to-emerald-300/10 p-4">
+            <Card className="space-y-4 border-[#2fc7a3]/20 bg-gradient-to-br from-[#1a3b35]/45 to-[#10312b]/40 p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-slate-100">Run Panel</p>
-                <p className="text-xs text-slate-300">Launch one full benchmark run across all selected models and scenarios.</p>
+                <p className="text-xs text-slate-300">Launch one integrated benchmark run.</p>
               </div>
               <div className="space-y-1">
                 <label htmlFor="runs-per-scenario" className="text-sm font-medium">
@@ -835,55 +854,63 @@ export default function HomePage() {
                   <option value={3}>3 (highest confidence)</option>
                 </select>
               </div>
+
               <Button onClick={handleRun} disabled={running || effectiveModels.length < 2} className="w-full gap-2">
                 <RefreshCw size={16} className={running ? "animate-spin" : ""} />
-                {running ? "Running integrated benchmark..." : "Run Readiness Benchmark"}
+                {running ? "Running benchmark..." : "Run Readiness Benchmark"}
               </Button>
+
               <div className="rounded-lg border border-white/10 bg-black/20 p-3">
                 <p className="text-[11px] uppercase tracking-[0.1em] text-slate-400">Run status</p>
                 <p className="mt-1 text-xs text-slate-200">{runSummary || "Run status will appear here."}</p>
               </div>
-              <div className="space-y-1 text-xs text-slate-300">
-                <p>Readiness checklist</p>
-                <p>- Minimum 2 models selected</p>
-                <p>- Docs grounding configured</p>
-                <p>- Integrations reachable (explicit or local fallback)</p>
+
+              <div className="space-y-2 text-xs text-slate-300">
+                <p className="font-semibold">Current benchmark coverage</p>
+                <p>Mocked: {data?.track.mocked === false ? "No" : "Unknown"}</p>
+                <p>Cases: {data?.track.scenarioCount ?? "-"}</p>
+                <p>Docs grounding: {data?.track.docs?.enabled ? "On" : "Off"}</p>
+                <p>Integrations ready: {data?.track.integrationStatus?.isFullyConfigured ? "Yes" : "Partial"}</p>
               </div>
             </Card>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Card className="space-y-2 border-cyan-200/20 bg-soft/50 p-4">
+            <Card className="space-y-2 border-[#46d7b6]/20 bg-soft/55 p-4">
               <div className="flex items-center gap-2 text-slate-300">
                 <Gauge size={16} /> Leader Score
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.overallScore)}`}>{leader ? metricLabel(leader.overallScore) : "-"}</p>
               <p className="text-xs text-slate-400">{leader ? leader.model : "No run data yet"}</p>
             </Card>
-            <Card className="space-y-2 border-fuchsia-200/20 bg-soft/50 p-4">
+            <Card className="space-y-2 border-[#2fc7a3]/20 bg-soft/55 p-4">
               <div className="flex items-center gap-2 text-slate-300">
                 <Brain size={16} /> Decision Accuracy
               </div>
-              <p className={`text-3xl font-semibold ${toneForRate(leader?.decisionAccuracyPct)}`}>{leader ? metricLabel(leader.decisionAccuracyPct, "%") : "-"}</p>
-              <p className="text-xs text-slate-400">Policy, priority, risk, controls, docs.</p>
+              <p className={`text-3xl font-semibold ${toneForRate(leader?.decisionAccuracyPct)}`}>
+                {leader ? metricLabel(leader.decisionAccuracyPct, "%") : "-"}
+              </p>
+              <p className="text-xs text-slate-400">Policy, controls, and documentation correctness.</p>
             </Card>
-            <Card className="space-y-2 border-emerald-200/20 bg-soft/50 p-4">
+            <Card className="space-y-2 border-[#3ab798]/20 bg-soft/55 p-4">
               <div className="flex items-center gap-2 text-slate-300">
                 <ShieldCheck size={16} /> Workflow Success
               </div>
-              <p className={`text-3xl font-semibold ${toneForRate(leader?.workflowSuccessRatePct)}`}>{leader ? metricLabel(leader.workflowSuccessRatePct, "%") : "-"}</p>
+              <p className={`text-3xl font-semibold ${toneForRate(leader?.workflowSuccessRatePct)}`}>
+                {leader ? metricLabel(leader.workflowSuccessRatePct, "%") : "-"}
+              </p>
               <p className="text-xs text-slate-400">Only eligible cases attempt execution.</p>
             </Card>
-            <Card className="space-y-2 border-sky-200/20 bg-soft/50 p-4">
+            <Card className="space-y-2 border-[#2b9980]/20 bg-soft/55 p-4">
               <div className="flex items-center gap-2 text-slate-300">
                 <Timer size={16} /> P95 Total
               </div>
               <p className="text-3xl font-semibold">{leader ? metricLabel(leader.p95TotalLatencyMs, " ms") : "-"}</p>
-              <p className="text-xs text-slate-400">End-to-end benchmark latency at p95.</p>
+              <p className="text-xs text-slate-400">End-to-end p95 latency.</p>
             </Card>
           </div>
 
-          <Disclosure title="Leaderboard table" subtitle="Per-model score components" defaultOpen>
+          <Disclosure title="General Leaderboard" subtitle="Global performance across all scored dimensions" defaultOpen>
             <div className="overflow-x-auto">
               <table className="data-table min-w-full text-left text-sm">
                 <thead className="text-slate-300">
@@ -891,33 +918,23 @@ export default function HomePage() {
                     <th className="px-2 py-2">Model</th>
                     <th className="px-2 py-2">Params (B)</th>
                     <th className="px-2 py-2">Overall</th>
-                    <th className="px-2 py-2">Decision Accuracy %</th>
-                    <th className="px-2 py-2">Base Policy %</th>
-                    <th className="px-2 py-2">Controls F1 %</th>
-                    <th className="px-2 py-2">Parse Rate %</th>
+                    <th className="px-2 py-2">Decision %</th>
                     <th className="px-2 py-2">Full Match %</th>
                     <th className="px-2 py-2">Docs Grounded %</th>
-                    <th className="px-2 py-2">Source Coverage %</th>
-                    <th className="px-2 py-2">Citation Validity %</th>
                     <th className="px-2 py-2">Workflow Success %</th>
-                    <th className="px-2 py-2">Execution Eligibility %</th>
+                    <th className="px-2 py-2">Exec Eligibility %</th>
                     <th className="px-2 py-2">Avg Latency (ms)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedModels.map((row) => (
                     <tr key={row.model} className="border-t border-white/10">
-                      <td className="px-2 py-2">{row.model}</td>
+                      <td className="px-2 py-2 font-medium">{row.model}</td>
                       <td className="px-2 py-2">{paramsLabel(row.paramsBillions)}</td>
                       <td className="px-2 py-2">{metricLabel(row.overallScore)}</td>
                       <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.basePolicyAccuracyPct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.controlsF1Pct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.parseRatePct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.fullMatchRatePct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.docsGroundingRatePct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.requiredSourceCoveragePct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.citationValidityPct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.workflowSuccessRatePct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.executionEligibilityPct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.avgTotalLatencyMs)}</td>
@@ -925,7 +942,7 @@ export default function HomePage() {
                   ))}
                   {!sortedModels.length && !isLoading ? (
                     <tr>
-                      <td className="px-2 py-3 text-slate-400" colSpan={14}>
+                      <td className="px-2 py-3 text-slate-400" colSpan={9}>
                         No readiness benchmark results yet.
                       </td>
                     </tr>
@@ -935,73 +952,164 @@ export default function HomePage() {
             </div>
           </Disclosure>
 
-          <Disclosure title="Task Definitions" subtitle="Human-readable checks scored on every run">
-            <div className="grid gap-2 text-sm text-slate-200 md:grid-cols-2">
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Return parseable structured output.</p>
-              </Card>
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Choose correct allow/block decision.</p>
-              </Card>
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Set approval requirement correctly.</p>
-              </Card>
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Set priority correctly.</p>
-              </Card>
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Set risk level correctly.</p>
-              </Card>
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Select required controls.</p>
-              </Card>
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Ground answer in required official docs.</p>
-              </Card>
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Provide valid citations.</p>
-              </Card>
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Pass execution-eligibility gates.</p>
-              </Card>
-              <Card className="flex items-start gap-2 bg-black/20 p-3">
-                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
-                <p>Complete execution path (or pass as decision-only case).</p>
-              </Card>
+          <Disclosure title="Sponsor Breakdown" subtitle="Per-sponsor quality and execution signal by model" defaultOpen>
+            <div className="space-y-4">
+              {sortedModels.map((modelRow) => {
+                const rows = sponsorBreakdownByModel.get(modelRow.model) ?? [];
+                return (
+                  <Card key={modelRow.model} className="bg-soft/55 p-4">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <Badge className="border-white/20 bg-white/10 text-white">{modelRow.model}</Badge>
+                      <Badge className="border-white/20 bg-white/5 text-white">overall {metricLabel(modelRow.overallScore)}</Badge>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="data-table min-w-full text-left text-xs">
+                        <thead className="text-slate-300">
+                          <tr>
+                            <th className="px-2 py-2">Sponsor</th>
+                            <th className="px-2 py-2">Cases</th>
+                            <th className="px-2 py-2">Decision %</th>
+                            <th className="px-2 py-2">Docs %</th>
+                            <th className="px-2 py-2">Execution Signal %</th>
+                            <th className="px-2 py-2">Sponsor Score</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr key={`${modelRow.model}-${row.sponsor}`} className="border-t border-white/10">
+                              <td className="px-2 py-2 font-medium">{row.sponsor}</td>
+                              <td className="px-2 py-2">{row.cases}</td>
+                              <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
+                              <td className="px-2 py-2">{metricLabel(row.docsGroundedPct)}</td>
+                              <td className="px-2 py-2">{metricLabel(row.executionSignalPct)}</td>
+                              <td className={`px-2 py-2 font-semibold ${toneForRate(row.sponsorScore)}`}>{metricLabel(row.sponsorScore)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                );
+              })}
+              {!sortedModels.length && !isLoading ? (
+                <p className="text-sm text-slate-400">Run the benchmark to populate sponsor-level breakdown.</p>
+              ) : null}
+            </div>
+          </Disclosure>
+        </Card>
+
+        <Card className="space-y-5 border-white/15 bg-panel/95 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold">Model Deep Dive</h2>
+              <p className="text-sm text-slate-300">Pick one model and inspect all scenario-level tasks without page scrolling.</p>
+            </div>
+            <Badge className="border-white/20 bg-white/10 text-white">1-click model navigation</Badge>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {sortedModels.map((row) => (
+              <button
+                key={row.model}
+                type="button"
+                onClick={() => setActiveModel(row.model)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  activeModel === row.model
+                    ? "border-[#41d8b6] bg-[#41d8b6]/15 text-[#a6f5e3]"
+                    : "border-white/20 bg-white/5 text-slate-200 hover:border-[#41d8b6]/40 hover:bg-[#41d8b6]/10"
+                }`}
+              >
+                {row.model} ({paramsLabel(row.paramsBillions)})
+              </button>
+            ))}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <Card className="space-y-1 bg-soft/55 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Overall</p>
+              <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.overallScore)}`}>
+                {metricLabel(activeModelRow?.overallScore)}
+              </p>
+            </Card>
+            <Card className="space-y-1 bg-soft/55 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Decision Accuracy</p>
+              <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.decisionAccuracyPct)}`}>
+                {metricLabel(activeModelRow?.decisionAccuracyPct, "%")}
+              </p>
+            </Card>
+            <Card className="space-y-1 bg-soft/55 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Workflow Success</p>
+              <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.workflowSuccessRatePct)}`}>
+                {metricLabel(activeModelRow?.workflowSuccessRatePct, "%")}
+              </p>
+            </Card>
+            <Card className="space-y-1 bg-soft/55 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Avg Latency</p>
+              <p className="text-2xl font-semibold">{metricLabel(activeModelRow?.avgTotalLatencyMs, " ms")}</p>
+            </Card>
+          </div>
+
+          <Disclosure title="Selected Model Sponsor View" subtitle="How this model performs by sponsor track" defaultOpen>
+            <div className="overflow-x-auto">
+              <table className="data-table min-w-full text-left text-sm">
+                <thead className="text-slate-300">
+                  <tr>
+                    <th className="px-2 py-2">Sponsor</th>
+                    <th className="px-2 py-2">Cases</th>
+                    <th className="px-2 py-2">Decision %</th>
+                    <th className="px-2 py-2">Docs %</th>
+                    <th className="px-2 py-2">Execution Signal %</th>
+                    <th className="px-2 py-2">Sponsor Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeModelSponsorRows.map((row) => (
+                    <tr key={`${activeModel}-${row.sponsor}`} className="border-t border-white/10">
+                      <td className="px-2 py-2 font-medium">{row.sponsor}</td>
+                      <td className="px-2 py-2">{row.cases}</td>
+                      <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.docsGroundedPct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.executionSignalPct)}</td>
+                      <td className={`px-2 py-2 font-semibold ${toneForRate(row.sponsorScore)}`}>{metricLabel(row.sponsorScore)}</td>
+                    </tr>
+                  ))}
+                  {!activeModelSponsorRows.length ? (
+                    <tr>
+                      <td className="px-2 py-3 text-slate-400" colSpan={6}>
+                        No sponsor breakdown for selected model yet.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
             </div>
           </Disclosure>
 
-          <Disclosure title="Run Task Audit (Human-Readable)" subtitle="Latest attempt per model and scenario">
+          <Disclosure title="Selected Model Task Audit" subtitle="Case-by-case pass/fail with human-readable explanations" defaultOpen>
             <div className="space-y-4">
-              {taskAuditRows.map((row) => {
+              {activeModelCaseRows.map((row) => {
                 const checklist = buildHumanTaskChecklist(row);
                 const passedCount = checklist.filter((item) => item.passed).length;
+                const scenario = scenarioById.get(row.caseId) || scenarioById.get(row.scenarioId);
+                const sponsors = caseSponsors(scenario, row.executionMode);
                 return (
                   <Card key={`${row.model}-${row.caseId}`} className="border-white/15 bg-soft/55 p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                      <Badge className="border-white/20 bg-white/10 text-white">{row.model}</Badge>
-                      <Badge className="border-white/20 bg-white/5 text-white">{row.caseName}</Badge>
-                      <Badge className="border-white/20 bg-white/5 text-white">attempt {row.attempt}</Badge>
-                      <Badge className="border-white/20 bg-white/5 text-white">
-                        tasks passed: {passedCount}/{checklist.length}
-                      </Badge>
-                      <Badge className="border-white/20 bg-white/5 text-white">
-                        total latency: {metricLabel(row.totalLatencyMs)} ms
-                      </Badge>
+                      <Badge className="border-white/20 bg-white/10 text-white">{row.caseName}</Badge>
+                      <Badge className={`border ${statusChipTone(row.workflow.status)}`}>{normalizeWorkflowStatus(row.workflow.status)}</Badge>
+                      <Badge className="border-white/20 bg-white/5 text-white">tasks passed: {passedCount}/{checklist.length}</Badge>
+                      <Badge className="border-white/20 bg-white/5 text-white">latency: {metricLabel(row.totalLatencyMs)} ms</Badge>
+                      {sponsors.map((sponsor) => (
+                        <Badge key={`${row.caseId}-${sponsor}`} className="border-white/20 bg-white/5 text-white">
+                          {sponsor}
+                        </Badge>
+                      ))}
                     </div>
+
                     <div className="space-y-2 text-sm">
                       {checklist.map((task) => (
                         <div
-                          key={task.label}
+                          key={`${row.caseId}-${task.label}`}
                           className={`rounded-lg border px-3 py-2 ${
                             task.passed ? "border-emerald-300/25 bg-emerald-300/10" : "border-rose-300/25 bg-rose-300/10"
                           }`}
@@ -1014,6 +1122,7 @@ export default function HomePage() {
                         </div>
                       ))}
                     </div>
+
                     <div className="mt-3 space-y-1 text-xs text-slate-400">
                       <p>Model reason: {row.llm.reason || "no reason text"}</p>
                       <p>Citation IDs: {joinList(row.llm.citations ?? [])}</p>
@@ -1022,71 +1131,15 @@ export default function HomePage() {
                   </Card>
                 );
               })}
-              {!taskAuditRows.length && !isLoading ? (
-                <p className="text-sm text-slate-400">Run the readiness benchmark to generate task-by-task audit rows.</p>
+              {!activeModelCaseRows.length && !isLoading ? (
+                <p className="text-sm text-slate-400">Run the benchmark to generate model-level task audit rows.</p>
               ) : null}
             </div>
           </Disclosure>
+        </Card>
 
-          <Disclosure title="Scenario evidence matrix" subtitle="What each model did on each workflow scenario">
-            <div className="space-y-4">
-              {scenarioRows.map((row) => (
-                <Card key={row.scenario.id} className="bg-soft/50 p-4">
-                  <p className="text-sm font-semibold text-slate-100">{row.scenario.name}</p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    Expected: decision {row.scenario.expected.decision}, approvalRequired {String(row.scenario.expected.approvalRequired)}, priority {row.scenario.expected.priority}, risk {row.scenario.expected.riskLevel}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Controls: {(row.scenario.expected.requiredControls ?? []).join(", ") || "none"} | Mode: {row.scenario.executionMode}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Required docs: {(row.scenario.requiredSources ?? []).join(", ") || "none"}
-                  </p>
-                  <div className="mt-3 overflow-x-auto">
-                    <table className="data-table min-w-full text-left text-xs">
-                      <thead className="text-slate-300">
-                        <tr>
-                          <th className="px-2 py-2">Model</th>
-                          <th className="px-2 py-2">Decision</th>
-                          <th className="px-2 py-2">Accuracy %</th>
-                          <th className="px-2 py-2">Docs grounded</th>
-                          <th className="px-2 py-2">Citations</th>
-                          <th className="px-2 py-2">Workflow status</th>
-                          <th className="px-2 py-2">Top note</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {row.byModel.map((entry) => (
-                          <tr key={entry.model} className="border-t border-white/10 align-top">
-                            <td className="px-2 py-2">{entry.model}</td>
-                            <td className="px-2 py-2">
-                              {entry.latest
-                                ? `${entry.latest.llm.decision}, approval=${String(entry.latest.llm.approvalRequired)}, priority=${entry.latest.llm.priority}, risk=${entry.latest.llm.riskLevel}`
-                                : "-"}
-                            </td>
-                            <td className="px-2 py-2">{entry.latest ? metricLabel(entry.latest.evaluation.accuracyPct) : "-"}</td>
-                            <td className="px-2 py-2">{entry.latest ? (entry.latest.evaluation.docsGrounded ? "yes" : "no") : "-"}</td>
-                            <td className="px-2 py-2 text-slate-300">
-                              {entry.latest ? (entry.latest.llm.citations?.join(", ") || "-") : "-"}
-                            </td>
-                            <td className="px-2 py-2 uppercase">{entry.latest ? normalizeWorkflowStatus(entry.latest.workflow.status) : "-"}</td>
-                            <td className="px-2 py-2 text-slate-300">
-                              {entry.latest ? rowTopIssue(entry.latest.workflow.notes) : "-"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              ))}
-              {!scenarioRows.length && !isLoading ? (
-                <p className="text-sm text-slate-400">Run the readiness benchmark to populate scenario evidence.</p>
-              ) : null}
-            </div>
-          </Disclosure>
-
-          <Disclosure title="Setup and integration requirements" subtitle="What is missing and what to configure">
+        <Card className="space-y-4 border-white/15 bg-panel/95 p-6">
+          <Disclosure title="Setup and Integration Requirements" subtitle="Explicit endpoint status and env template">
             <div className="space-y-4">
               {missingIntegrations.length > 0 ? (
                 <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 p-4">
@@ -1108,7 +1161,7 @@ export default function HomePage() {
                 <p className="text-sm text-emerald-200">All explicit integration settings are configured.</p>
               )}
 
-              <Card className="bg-soft/50 p-4">
+              <Card className="bg-soft/55 p-4">
                 <p className="mb-2 text-sm font-semibold">Environment snippet</p>
                 <pre className="overflow-auto rounded-lg bg-black/25 p-3 text-[11px] leading-5 text-slate-100">{envSnippet}</pre>
               </Card>
@@ -1116,7 +1169,7 @@ export default function HomePage() {
           </Disclosure>
 
           {runTechnicalLog ? (
-            <Disclosure title="Technical logs" subtitle="Raw run output for debugging">
+            <Disclosure title="Technical Logs" subtitle="Raw run output for debugging">
               <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-soft/60 p-3 text-[11px] leading-4 text-slate-200">
                 {runTechnicalLog}
               </pre>
