@@ -642,12 +642,10 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
       <section className="mb-6">
-        <Card className="relative overflow-hidden border-[#2bb89a]/20 bg-gradient-to-br from-[#0a2d28]/95 via-[#062823]/95 to-[#041d1a]/95 p-6 md:p-8">
-          <div className="pointer-events-none absolute -right-12 -top-14 h-56 w-56 rounded-full bg-[#23c19f]/20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-8 h-56 w-56 rounded-full bg-[#1a7f6b]/15 blur-3xl" />
+        <Card className="relative overflow-hidden border-white/10 bg-[#001f1e]/90 p-6 md:p-8">
           <div className="relative z-10 flex flex-wrap items-start justify-between gap-5">
             <div className="space-y-3">
-              <Badge className="gap-1 border-[#35cda7]/35 bg-[#35cda7]/10 text-[#97f2dc]">
+              <Badge className="gap-1 border-white/20 bg-white/10 text-white">
                 <Sparkles size={12} />
                 Final Presentation UI
               </Badge>
@@ -700,7 +698,7 @@ export default function HomePage() {
                 </select>
               </div>
 
-              <Card className="space-y-3 border-[#2fc7a3]/20 bg-soft/55 p-4">
+              <Card className="space-y-3 border-white/10 bg-soft/55 p-4">
                 <div className="flex items-center gap-2 text-sm font-medium text-gray-100">
                   <Cpu size={15} />
                   Quick model presets
@@ -711,7 +709,7 @@ export default function HomePage() {
                       key={preset.id}
                       type="button"
                       onClick={() => applyModelPreset(preset.models, preset.label)}
-                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-100 transition hover:border-[#3ce2bb]/50 hover:bg-[#3ce2bb]/10"
+                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-100 transition hover:border-accent/50 hover:bg-accent/15"
                     >
                       {preset.label}
                     </button>
@@ -729,7 +727,7 @@ export default function HomePage() {
                     <label
                       key={model}
                       className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
-                        checked ? "border-[#2fc7a3] bg-[#2fc7a3]/12" : "border-white/15 bg-soft/60"
+                        checked ? "border-accent bg-accent/15" : "border-white/15 bg-soft/60"
                       }`}
                     >
                       <span className="truncate pr-2">
@@ -742,7 +740,7 @@ export default function HomePage() {
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleModelSelection(model)}
-                          className="h-4 w-4 accent-[#2fc7a3]"
+                          className="h-4 w-4 accent-teal-500"
                         />
                       </span>
                     </label>
@@ -860,14 +858,14 @@ export default function HomePage() {
                     type="checkbox"
                     checked={requireCitations}
                     onChange={(event) => setRequireCitations(event.target.checked)}
-                    className="h-4 w-4 accent-[#2fc7a3]"
+                    className="h-4 w-4 accent-teal-500"
                   />
                   Require citation coverage for passing
                 </label>
               </Card>
             </div>
 
-            <Card className="space-y-4 border-[#2fc7a3]/20 bg-gradient-to-br from-[#1a3b35]/45 to-[#10312b]/40 p-4">
+            <Card className="space-y-4 border-white/10 bg-soft/50 p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-gray-100">Run Panel</p>
                 <p className="text-xs text-gray-300">Launch one integrated benchmark run.</p>
@@ -909,14 +907,14 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Card className="space-y-2 border-[#46d7b6]/20 bg-soft/55 p-4">
+            <Card className="space-y-2 border-white/10 bg-soft/55 p-4">
               <div className="flex items-center gap-2 text-gray-300">
                 <Gauge size={16} /> Leader Score
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.overallScore)}`}>{leader ? metricLabel(leader.overallScore) : "-"}</p>
               <p className="text-xs text-gray-400">{leader ? leader.model : "No run data yet"}</p>
             </Card>
-            <Card className="space-y-2 border-[#2fc7a3]/20 bg-soft/55 p-4">
+            <Card className="space-y-2 border-white/10 bg-soft/55 p-4">
               <div className="flex items-center gap-2 text-gray-300">
                 <Brain size={16} /> Decision Accuracy
               </div>
@@ -925,7 +923,7 @@ export default function HomePage() {
               </p>
               <p className="text-xs text-gray-400">Policy, controls, and documentation correctness.</p>
             </Card>
-            <Card className="space-y-2 border-[#3ab798]/20 bg-soft/55 p-4">
+            <Card className="space-y-2 border-white/10 bg-soft/55 p-4">
               <div className="flex items-center gap-2 text-gray-300">
                 <ShieldCheck size={16} /> Workflow Success
               </div>
@@ -934,7 +932,7 @@ export default function HomePage() {
               </p>
               <p className="text-xs text-gray-400">Only eligible cases attempt execution.</p>
             </Card>
-            <Card className="space-y-2 border-[#2b9980]/20 bg-soft/55 p-4">
+            <Card className="space-y-2 border-white/10 bg-soft/55 p-4">
               <div className="flex items-center gap-2 text-gray-300">
                 <Timer size={16} /> P95 Total
               </div>
@@ -993,8 +991,8 @@ export default function HomePage() {
                   onClick={() => setSponsorShowAllModels(true)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     sponsorShowAllModels
-                      ? "border-[#41d8b6] bg-[#41d8b6]/15 text-[#a6f5e3]"
-                      : "border-white/20 bg-white/5 text-gray-200 hover:border-[#41d8b6]/40 hover:bg-[#41d8b6]/10"
+                      ? "border-accent bg-accent/15 text-white"
+                      : "border-white/20 bg-white/5 text-gray-200 hover:border-accent/45 hover:bg-accent/12"
                   }`}
                 >
                   All models
@@ -1009,8 +1007,8 @@ export default function HomePage() {
                     }}
                     className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       !sponsorShowAllModels && activeModel === row.model
-                        ? "border-[#41d8b6] bg-[#41d8b6]/15 text-[#a6f5e3]"
-                        : "border-white/20 bg-white/5 text-gray-200 hover:border-[#41d8b6]/40 hover:bg-[#41d8b6]/10"
+                        ? "border-accent bg-accent/15 text-white"
+                        : "border-white/20 bg-white/5 text-gray-200 hover:border-accent/45 hover:bg-accent/12"
                     }`}
                   >
                     {row.model}
@@ -1102,8 +1100,8 @@ export default function HomePage() {
                 }}
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   activeModel === row.model
-                    ? "border-[#41d8b6] bg-[#41d8b6]/15 text-[#a6f5e3]"
-                    : "border-white/20 bg-white/5 text-gray-200 hover:border-[#41d8b6]/40 hover:bg-[#41d8b6]/10"
+                    ? "border-accent bg-accent/15 text-white"
+                    : "border-white/20 bg-white/5 text-gray-200 hover:border-accent/45 hover:bg-accent/12"
                 }`}
               >
                 {row.model} ({paramsLabel(row.paramsBillions)})
