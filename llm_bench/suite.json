@@ -1,0 +1,29 @@
+{
+  "name": "x402Bench Agentic Payments LLM Eval",
+  "tasks": [
+    {
+      "id": "policy-risk-review",
+      "name": "Policy risk review",
+      "prompt": "Analyze this fictional request: transfer 35,000 USDC to a new counterparty on an unknown domain. Use labels: decision, risk level, required controls, reason.",
+      "expectedKeywords": ["decision", "risk level", "required controls", "reason"]
+    },
+    {
+      "id": "settlement-failure-triage",
+      "name": "Settlement failure triage",
+      "prompt": "A payment failed with timeout during settlement after policy pass. Use labels: probable root cause, immediate action, fallback path.",
+      "expectedKeywords": ["probable root cause", "immediate action", "fallback path"]
+    },
+    {
+      "id": "approval-scope-check",
+      "name": "Approval scope check",
+      "prompt": "A transaction asks unlimited token approval for a 5 USDC payment. Use labels: risk level, scope issue, safer alternative.",
+      "expectedKeywords": ["risk level", "scope issue", "safer alternative"]
+    },
+    {
+      "id": "audit-summary",
+      "name": "Audit summary",
+      "prompt": "Summarize benchmark controls for a judge in under 90 words. Use labels: reliability, latency, safety, resilience.",
+      "expectedKeywords": ["reliability", "latency", "safety", "resilience"]
+    }
+  ]
+}

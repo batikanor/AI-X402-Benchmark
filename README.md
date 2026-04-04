@@ -97,6 +97,17 @@ npm run dev
 - `npm test`: unit tests
 - `npm run api:dev`: run FastAPI backend on port 8000
 - `npm run ui:dev`: run Next.js frontend on port 3000
+- `npm run llm:bench`: run real Ollama LLM benchmark on `gemma4:e4b`
+
+## Real LLM benchmark
+
+Use local Ollama models for non-mock benchmark evidence:
+
+```bash
+npm run llm:bench
+```
+
+Outputs are written to `llm_bench/results/*.json` and `llm_bench/results/*.md`.
 
 ## Integration notes
 

@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "runId": "llm-bench-20260404120415-b39de719",
+    "suiteName": "x402Bench Agentic Payments LLM Eval",
+    "startedAt": "2026-04-04T12:04:15.158Z",
+    "finishedAt": "2026-04-04T12:04:55.689Z",
+    "models": [
+      "gemma4:e4b"
+    ],
+    "taskCount": 4,
+    "runsPerTask": 1,
+    "api": "http://127.0.0.1:11434/api/generate"
+  },
+  "summary": {
+    "models": [
+      {
+        "model": "gemma4:e4b",
+        "avgLatencyMs": 10131.91,
+        "p95LatencyMs": 15682.86,
+        "avgCoveragePct": 100,
+        "successRatePct": 100
+      }
+    ]
+  },
+  "results": [
+    {
+      "model": "gemma4:e4b",
+      "taskId": "policy-risk-review",
+      "taskName": "Policy risk review",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 15947.03,
+      "output": "decision: Reject/Halt transfer until full verification is completed.\nrisk level: High\nrequired controls: Mandatory Know Your Customer (KYC) and Know Your Business (KYB) verification for the counterparty; Multi-factor authentication (MFA) required for approval; Comprehensive due diligence (DD) on the recipient domain and wallet address.\nreason: The combination of a large sum of funds ($35,000), an unknown counterparty, and an unverified destination domain presents an unacceptable and high risk of fraud or malicious activity.",
+      "matchedKeywords": [
+        "decision",
+        "risk level",
+        "required controls",
+        "reason"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "gemma4:e4b",
+      "taskId": "settlement-failure-triage",
+      "taskName": "Settlement failure triage",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 14185.88,
+      "output": "probable root cause: Downstream network instability or service degradation at the acquiring bank or payment network level.\nimmediate action: Initiate a status inquiry (e.g., using a dedicated reconciliation API) to determine if the funds are pending or if the failure is definitive; if definitive, queue for a controlled, limited retry.\nfallback path: Route the transaction through a secondary payment gateway or utilize an alternative payment rail (e.g., switching from card network settlement to ACH transfer).",
+      "matchedKeywords": [
+        "probable root cause",
+        "immediate action",
+        "fallback path"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "gemma4:e4b",
+      "taskId": "approval-scope-check",
+      "taskName": "Approval scope check",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 765.61,
+      "output": "risk level: High\nscope issue: Excessive approval\nsafer alternative: Limit approval to 5 USDC",
+      "matchedKeywords": [
+        "risk level",
+        "scope issue",
+        "safer alternative"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "gemma4:e4b",
+      "taskId": "audit-summary",
+      "taskName": "Audit summary",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 9629.13,
+      "output": "reliability: Measures consistent and accurate judgment across diverse case types.\nlatency: Ensures timely and efficient decision-making without undue delay.\nsafety: Verifies unbiased outcomes and prevents harmful or discriminatory rulings.\nresilience: Tests the system's stability when faced with novel or adversarial inputs.",
+      "matchedKeywords": [
+        "reliability",
+        "latency",
+        "safety",
+        "resilience"
+      ],
+      "coveragePct": 100
+    }
+  ]
+}
