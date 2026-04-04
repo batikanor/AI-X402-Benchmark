@@ -166,7 +166,7 @@ class ReadinessRunRequest(BaseModel):
     apiBaseUrl: str | None = Field(default=None, max_length=1024)
     apiKeyEnv: str = Field(default="OPENAI_API_KEY", max_length=64)
     docsPackPath: str | None = Field(default=None, max_length=2048)
-    docsTopK: int = Field(default=5, ge=1, le=12)
+    docsTopK: int = Field(default=0, ge=0, le=2000)
     requireCitations: bool = Field(default=True)
     runsPerScenario: int = Field(default=1, ge=1, le=3)
     maxTokens: int = Field(default=512, ge=64, le=4096)

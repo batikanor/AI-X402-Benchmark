@@ -57,6 +57,10 @@ Dual-mode evaluation (default):
 - `with_docs`: model receives retrieved official-doc excerpts in prompt context
 - `without_docs`: model receives zero docs excerpts (tests retained sponsor knowledge)
 
+Docs context policy:
+- `docsTopK=0` means full docs context for each case (all chunks from selected docs pack sources).
+- UI run panel now uses this full-context mode by default.
+
 Each readiness run now executes both modes for every selected model and case, then reports:
 - per-mode leaderboards
 - per-model deltas (`with_docs - without_docs`)
@@ -233,6 +237,10 @@ npm run ui:health
 
 Open:
 - [http://127.0.0.1:46211](http://127.0.0.1:46211)
+
+UI behavior:
+- Model input is manual CSV only.
+- On page load, manual model list auto-seeds from the latest benchmark run models shown in the dashboard.
 
 `ui:health` validates that the HTML and linked CSS both return `200` so you do not get an unstyled page.
 

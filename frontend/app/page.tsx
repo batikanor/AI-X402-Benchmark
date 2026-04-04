@@ -499,13 +499,11 @@ export default function HomePage() {
     refreshInterval: 15000,
   });
 
-  const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [runtime, setRuntime] = useState<RuntimeMode>("ollama");
   const [customModels, setCustomModels] = useState("");
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [apiKeyEnv, setApiKeyEnv] = useState("OPENAI_API_KEY");
   const [docsPackPath, setDocsPackPath] = useState("");
-  const [docsTopK, setDocsTopK] = useState(5);
   const [requireCitations, setRequireCitations] = useState(true);
   const [runsPerScenario, setRunsPerScenario] = useState(1);
   const [running, setRunning] = useState(false);
@@ -516,24 +514,28 @@ export default function HomePage() {
   const [sponsorShowAllModels, setSponsorShowAllModels] = useState(false);
 
   useEffect(() => {
-    if (!data?.availableModels.length) return;
-    setSelectedModels((previous) => {
-      const filtered = previous.filter((model) => data.availableModels.includes(model));
-      if (filtered.length >= 2) return filtered;
-      const seeded = [...data.recommendedModels, ...data.availableModels];
-      return Array.from(new Set(seeded)).slice(0, Math.min(6, data.availableModels.length));
-    });
-  }, [data]);
-
-  useEffect(() => {
     if (runtime !== "openai_compat") return;
     setApiBaseUrl((previous) => previous || HF_OPENAI_COMPAT_URL);
   }, [runtime]);
 
+  const latestRunModels = useMemo(() => {
+    const models = [
+      ...(data?.models ?? []).map((item) => item.model),
+      ...(data?.modelsByDocMode?.with_docs ?? []).map((item) => item.model),
+      ...(data?.modelsByDocMode?.without_docs ?? []).map((item) => item.model),
+    ];
+    return Array.from(new Set(models.map((item) => String(item || "").trim()).filter(Boolean)));
+  }, [data?.models, data?.modelsByDocMode?.with_docs, data?.modelsByDocMode?.without_docs]);
+
+  useEffect(() => {
+    if (customModels.trim()) return;
+    if (!latestRunModels.length) return;
+    setCustomModels(latestRunModels.join(","));
+  }, [customModels, latestRunModels]);
+
   useEffect(() => {
     const docs = data?.track.docs;
     if (!docs) return;
-    setDocsTopK((previous) => (previous > 0 ? previous : docs.topK || 5));
     setRequireCitations(docs.requireCitations);
     if (!docsPackPath && docs.defaultPackPath) {
       setDocsPackPath(docs.defaultPackPath);
@@ -569,20 +571,6 @@ export default function HomePage() {
       return a.avgTotalLatencyMs - b.avgTotalLatencyMs;
     });
   }, [modeModelRows]);
-
-  const modelParamsByName = useMemo(() => {
-    const map = new Map<string, number | null>();
-    for (const row of data?.models ?? []) {
-      map.set(row.model, row.paramsBillions ?? null);
-    }
-    for (const row of data?.modelsByDocMode?.with_docs ?? []) {
-      map.set(row.model, row.paramsBillions ?? null);
-    }
-    for (const row of data?.modelsByDocMode?.without_docs ?? []) {
-      map.set(row.model, row.paramsBillions ?? null);
-    }
-    return map;
-  }, [data?.models, data?.modelsByDocMode?.with_docs, data?.modelsByDocMode?.without_docs]);
 
   useEffect(() => {
     if (!sortedModels.length) {
@@ -667,10 +655,8 @@ export default function HomePage() {
   }, [missingIntegrations]);
 
   const effectiveModels = useMemo(() => {
-    const parsed = parseModelCsv(customModels);
-    if (parsed.length) return parsed;
-    return selectedModels;
-  }, [customModels, selectedModels]);
+    return parseModelCsv(customModels);
+  }, [customModels]);
 
   const latestResultRows = useMemo(() => {
     const results = data?.results ?? [];
@@ -989,17 +975,9 @@ export default function HomePage() {
     ? "Explicit integration endpoints are configured."
     : "Using local integration fallbacks where explicit endpoints are missing.";
 
-  function toggleModelSelection(model: string) {
-    setSelectedModels((previous) => {
-      if (previous.includes(model)) return previous.filter((item) => item !== model);
-      if (previous.length >= 8) return previous;
-      return [...previous, model];
-    });
-  }
-
   async function handleRun() {
     if (effectiveModels.length < 2) {
-      setRunSummary("Select at least 2 models to run a readiness comparison.");
+      setRunSummary("Enter at least 2 models in the manual model list to run a readiness comparison.");
       return;
     }
 
@@ -1017,7 +995,7 @@ export default function HomePage() {
         apiBaseUrl: apiBaseUrl.trim() || undefined,
         apiKeyEnv: apiKeyEnv.trim() || undefined,
         docsPackPath: docsPackPath.trim() || undefined,
-        docsTopK,
+        docsTopK: 0,
         requireCitations,
         runsPerScenario,
         maxTokens: 512,
@@ -1287,39 +1265,6 @@ export default function HomePage() {
                 </select>
               </div>
 
-              <p className="text-sm font-medium">Models to evaluate (2 to 8)</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {(data?.availableModels ?? []).map((model) => {
-                  const checked = selectedModels.includes(model);
-                  const recommended = data?.recommendedModels.includes(model) ?? false;
-                  return (
-                    <label
-                      key={model}
-                      className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
-                        checked ? "border-accent bg-accent/20" : "border-[#4a4a46] bg-soft"
-                      }`}
-                    >
-                      <span className="truncate pr-2">
-                        {model}
-                        <span className="ml-2 text-xs text-stone-400">{paramsLabel(modelParamsByName.get(model))}</span>
-                      </span>
-                      <span className="flex items-center gap-2">
-                        {recommended ? <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">recommended</Badge> : null}
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleModelSelection(model)}
-                          className="h-4 w-4 accent-[#6a7448]"
-                        />
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-              {!data?.availableModels.length && !isLoading && runtime === "ollama" ? (
-                <p className="text-xs text-amber-200">No Ollama models detected. Install at least 2 text models first.</p>
-              ) : null}
-
               <Card className="space-y-2 bg-soft p-4">
                 <label htmlFor="custom-models" className="text-sm font-medium">
                   Manual model list (comma-separated)
@@ -1334,6 +1279,9 @@ export default function HomePage() {
                 <p className="text-xs text-stone-400">Effective models: {effectiveModels.length ? effectiveModels.join(", ") : "-"}</p>
                 <p className="text-xs text-stone-400">
                   Mixed run is supported: OpenAI models and Ollama local tags can run together in one benchmark.
+                </p>
+                <p className="text-xs text-stone-400">
+                  Detected local Ollama models: {(data?.availableModels ?? []).length ? (data?.availableModels ?? []).join(", ") : "none detected"}
                 </p>
               </Card>
 
@@ -1380,23 +1328,9 @@ export default function HomePage() {
                     className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label htmlFor="docs-top-k" className="text-sm font-medium">
-                    Retrieved excerpts per case
-                  </label>
-                  <select
-                    id="docs-top-k"
-                    value={docsTopK}
-                    onChange={(event) => setDocsTopK(Number(event.target.value))}
-                    className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
-                  >
-                    {[3, 4, 5, 6, 8, 10, 12].map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <p className="text-xs text-stone-300">
+                  Docs context mode uses full source pages from this pack (all chunks, no top-k truncation).
+                </p>
                 <label className="flex items-center gap-2 text-sm text-stone-200">
                   <input
                     type="checkbox"
@@ -1483,6 +1417,7 @@ export default function HomePage() {
                 </p>
                 <p>Docs modes: {availableDocModes.join(", ")}</p>
                 <p>Docs grounding: {data?.track.docs?.enabled ? "On" : "Off"}</p>
+                <p>Docs context scope: {(data?.track.docs?.topK ?? 0) === 0 ? "Full source pages (all chunks)" : `Top ${data?.track.docs?.topK} chunks`}</p>
                 <p>Integrations ready: {data?.track.integrationStatus?.isFullyConfigured ? "Yes" : "Partial"}</p>
               </div>
             </Card>

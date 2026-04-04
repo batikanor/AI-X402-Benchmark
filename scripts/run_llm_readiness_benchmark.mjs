@@ -22,7 +22,7 @@ function parseArgs(argv) {
     temperature: 0.1,
     integrationBaseUrl: '',
     docsPack: '',
-    docsTopK: 5,
+    docsTopK: 0,
     requireCitations: true,
     docModes: 'with_docs,without_docs',
   };
@@ -128,8 +128,8 @@ function parseArgs(argv) {
     throw new Error('temperature must be between 0 and 1.');
   }
 
-  if (!Number.isInteger(options.docsTopK) || options.docsTopK < 1 || options.docsTopK > 12) {
-    throw new Error('docsTopK must be an integer between 1 and 12.');
+  if (!Number.isInteger(options.docsTopK) || options.docsTopK < 0 || options.docsTopK > 2000) {
+    throw new Error('docsTopK must be an integer between 0 and 2000 (0 = full docs context).');
   }
 
   const normalizedDocModes = normalizeDocModes(options.docModes);
@@ -607,6 +607,9 @@ function buildDocQuery(testCase) {
 
 function selectDocExcerpts({ docsPack, testCase, topK }) {
   if (!docsPack.enabled) return [];
+  if (!topK || topK <= 0) {
+    return docsPack.chunks.map((item) => item);
+  }
 
   const queryTokens = tokenize(buildDocQuery(testCase));
   const querySet = new Set(queryTokens);
@@ -1055,7 +1058,7 @@ function markdownReport(report) {
   if (docModes.includes('with_docs')) {
     lines.push(`- Docs pack: ${report.meta.docs.name} (${report.meta.docs.version})`);
     lines.push(`- Docs sources: ${report.meta.docs.sourceCount}`);
-    lines.push(`- Docs excerpts per case: ${report.meta.docs.topK}`);
+    lines.push(`- Docs context per case: ${report.meta.docs.topK === 0 ? 'all source chunks' : `top-${report.meta.docs.topK} chunks`}`);
     lines.push(`- Citations required: ${report.meta.docs.requireCitations ? 'yes' : 'no'}`);
   }
 
