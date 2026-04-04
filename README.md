@@ -35,6 +35,8 @@ src/
 config/
 tests/
 docs/
+backend/
+frontend/
 ```
 
 ## Quickstart
@@ -71,12 +73,30 @@ npm run run
 npm run run:strict
 ```
 
+### 6) Start API + dashboard
+
+```bash
+# Terminal A
+python3 -m venv backend/.venv
+source backend/.venv/bin/activate
+pip install -r backend/requirements.txt
+npm run api:dev
+
+# Terminal B
+cd frontend
+npm install
+cp .env.local.example .env.local
+npm run dev
+```
+
 ## Scripts
 
 - `npm run check`: validate benchmark config
 - `npm run run`: execute benchmark suite
 - `npm run run:strict`: execute benchmark + fail below threshold
 - `npm test`: unit tests
+- `npm run api:dev`: run FastAPI backend on port 8000
+- `npm run ui:dev`: run Next.js frontend on port 3000
 
 ## Integration notes
 

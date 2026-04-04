@@ -4,3 +4,7 @@ reports/*.json
 reports/*.md
 reports/*.html
 .DS_Store
+backend/.venv/
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local

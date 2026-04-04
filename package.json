@@ -8,7 +8,12 @@
     "run": "node src/cli.js run --config config/benchmark.config.json",
     "run:strict": "node src/cli.js run --config config/benchmark.config.json --strict",
     "test": "node --test tests/*.test.js",
-    "check": "node src/cli.js validate --config config/benchmark.config.json"
+    "check": "node src/cli.js validate --config config/benchmark.config.json",
+    "api:dev": "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend",
+    "api:start": "uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir backend",
+    "ui:dev": "npm --prefix frontend run dev",
+    "ui:build": "npm --prefix frontend run build",
+    "ui:start": "npm --prefix frontend run start"
   },
   "engines": {
     "node": ">=20"
