@@ -37,6 +37,7 @@ See `docs/ARCHITECTURE.md` and `/api/v1/alignment` for the full mapping to:
 - Chainlink operations responsibilities and automation best practices
 - Ledger clear-signing guidance
 - EIP-712 / EIP-7730 typed-signing standards
+- end-to-end system diagram (prompting, docs grounding, scoring weights, execution path)
 
 ## Project structure
 
