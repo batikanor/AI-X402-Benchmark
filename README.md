@@ -30,7 +30,7 @@ Coverage in current suite:
 
 | Sponsor | Cases mapped | ETHGlobal challenge alignment |
 | --- | ---: | --- |
-| Hedera | 6/12 | AI & Agentic Payments on Hedera |
+| Hedera | 8/12 | AI & Agentic Payments on Hedera |
 | Chainlink | 10/12 | Best workflow with Chainlink CRE, Connect the World, Privacy Standard |
 | Ledger | 11/12 | AI Agents x Ledger, Clear Signing/Integrations/Apps |
 
@@ -191,6 +191,23 @@ Official OpenAI cheap mini/nano run:
 # requires OPENAI_API_KEY in .env
 npm run readiness:bench:openai-cheap
 ```
+
+Mixed-provider run in one benchmark (OpenAI + local Ollama):
+
+```bash
+node scripts/run_llm_readiness_benchmark.mjs \
+  --config config/benchmark.config.json \
+  --suite readiness_bench/suite.json \
+  --runtime openai_compat \
+  --api-base-url https://api.openai.com/v1 \
+  --api-key-env OPENAI_API_KEY \
+  --models gpt-5.4-mini,gpt-5.4-nano,qwen3:4b-instruct,qwen2.5:0.5b
+```
+
+Routing rules:
+- OpenAI-style IDs (for example `gpt-5.4-mini`) use the OpenAI-compatible endpoint.
+- Ollama-style tags (for example `qwen3:4b-instruct`) run locally through Ollama.
+- Optional explicit prefixes are supported: `openai:<model>` or `ollama:<model>`.
 
 Latest mini/nano model IDs are discovered from your account via `/v1/models`.
 As of April 5, 2026 in this workspace account they are:

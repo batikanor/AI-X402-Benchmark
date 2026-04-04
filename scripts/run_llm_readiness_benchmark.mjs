@@ -785,20 +785,68 @@ async function callOpenAICompat({ model, prompt, maxTokens, temperature, apiBase
   };
 }
 
+function isLikelyLocalModelTag(model) {
+  const value = String(model || '').trim();
+  if (!value) return false;
+  const lower = value.toLowerCase();
+  if (
+    lower.startsWith('gpt-')
+    || lower.startsWith('o1')
+    || lower.startsWith('o3')
+    || lower.startsWith('o4')
+    || lower.startsWith('chatgpt-')
+  ) {
+    return false;
+  }
+  if (value.includes(':')) return true;
+  if (lower.startsWith('local/')) return true;
+  return false;
+}
+
+function resolveModelRouting({ runtime, model }) {
+  const raw = String(model || '').trim();
+  const lower = raw.toLowerCase();
+
+  if (lower.startsWith('ollama:')) {
+    return {
+      provider: 'ollama',
+      model: raw.slice('ollama:'.length).trim(),
+    };
+  }
+  if (lower.startsWith('openai:')) {
+    return {
+      provider: 'openai_compat',
+      model: raw.slice('openai:'.length).trim(),
+    };
+  }
+  if (runtime === 'ollama') {
+    return { provider: 'ollama', model: raw };
+  }
+  if (runtime === 'openai_compat' && isLikelyLocalModelTag(raw)) {
+    return { provider: 'ollama', model: raw };
+  }
+  return { provider: 'openai_compat', model: raw };
+}
+
 async function callModel({ runtime, model, prompt, maxTokens, temperature, apiBaseUrl, apiKeyEnv }) {
   const started = performance.now();
+  const routed = resolveModelRouting({ runtime, model });
+  const routedRuntime = routed.provider;
+  const routedModel = routed.model;
 
   let response;
-  if (runtime === 'ollama') {
-    response = await callOllama({ model, prompt, maxTokens, temperature, apiBaseUrl });
-  } else if (runtime === 'openai_compat') {
-    response = await callOpenAICompat({ model, prompt, maxTokens, temperature, apiBaseUrl, apiKeyEnv });
+  if (routedRuntime === 'ollama') {
+    response = await callOllama({ model: routedModel, prompt, maxTokens, temperature, apiBaseUrl });
+  } else if (routedRuntime === 'openai_compat') {
+    response = await callOpenAICompat({ model: routedModel, prompt, maxTokens, temperature, apiBaseUrl, apiKeyEnv });
   } else {
-    throw new Error(`Unsupported runtime: ${runtime}`);
+    throw new Error(`Unsupported runtime: ${routedRuntime}`);
   }
 
   return {
     ...response,
+    provider: routedRuntime,
+    routedModel,
     latencyMs: round(performance.now() - started),
   };
 }
@@ -1085,7 +1133,12 @@ async function main() {
     throw new Error('Provide at least two models (comma-separated) for comparative readiness benchmarking.');
   }
   if (options.runtime === 'openai_compat') {
-    resolveOpenAICompatApiKey(options.apiKeyEnv);
+    const needsOpenAIKey = models.some(
+      (model) => resolveModelRouting({ runtime: options.runtime, model }).provider === 'openai_compat',
+    );
+    if (needsOpenAIKey) {
+      resolveOpenAICompatApiKey(options.apiKeyEnv);
+    }
   }
 
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -1136,6 +1189,8 @@ async function main() {
           let doneReason = null;
           let llmError = null;
           let modelEndpoint = '';
+          let modelProvider = options.runtime;
+          let routedModelName = model;
 
           try {
             const response = await callModel({
@@ -1151,6 +1206,8 @@ async function main() {
             llmLatencyMs = response.latencyMs;
             doneReason = response.doneReason;
             modelEndpoint = response.endpoint;
+            modelProvider = response.provider || options.runtime;
+            routedModelName = response.routedModel || model;
           } catch (error) {
             llmLatencyMs = 0;
             llmError = error instanceof Error ? error.message : String(error);
@@ -1257,6 +1314,8 @@ async function main() {
               requiredControls: parsed.requiredControls,
               citations: parsed.citations,
               reason: parsed.reason,
+              provider: modelProvider,
+              routedModel: routedModelName,
               latencyMs: llmLatencyMs,
               rawOutput: llmOutput,
               doneReason,

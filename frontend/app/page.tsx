@@ -6,7 +6,6 @@ import {
   Brain,
   CheckCircle2,
   ChevronDown,
-  Cpu,
   Gauge,
   RefreshCw,
   ShieldCheck,
@@ -35,51 +34,6 @@ type ReadinessScenario = ReadinessDashboardResponse["scenarios"][number];
 const HF_OPENAI_COMPAT_URL = "https://router.huggingface.co/v1";
 const SPONSORS: SponsorKey[] = ["Hedera", "Chainlink", "Ledger"];
 const OFFICIAL_DOC_DOMAINS = ["docs.hedera.com", "docs.chain.link", "developers.ledger.com", "eips.ethereum.org"];
-
-const GEMMA4_VARIANTS = [
-  {
-    tag: "gemma4:e2b",
-    label: "E2B (edge)",
-    params: "2.3B effective (5.1B total)",
-    className: "Phone/edge first",
-  },
-  {
-    tag: "gemma4:e4b",
-    label: "E4B (edge)",
-    params: "4.5B effective (8.0B total)",
-    className: "Phone + laptop friendly",
-  },
-  {
-    tag: "gemma4:26b",
-    label: "26B A4B (MoE)",
-    params: "25.2B total (3.8B active)",
-    className: "Workstation/GPU",
-  },
-  {
-    tag: "gemma4:31b",
-    label: "31B dense",
-    params: "30.7B total",
-    className: "High-end workstation",
-  },
-];
-
-const MODEL_PRESETS = [
-  {
-    id: "phone",
-    label: "Phone-size pack",
-    models: ["qwen2.5:0.5b", "qwen3:4b-instruct", "gemma4:e2b", "gemma4:e4b"],
-  },
-  {
-    id: "balanced",
-    label: "Balanced pack",
-    models: ["qwen3:4b-instruct", "gemma4:e4b", "gemma3:12b-it-qat", "phi4:14b"],
-  },
-  {
-    id: "capacity",
-    label: "Capacity pack",
-    models: ["gemma4:26b", "gemma4:31b", "phi4:14b", "deepseek-r1:14b"],
-  },
-];
 
 type SponsorChallengeInfo = {
   title: string;
@@ -221,6 +175,16 @@ type ModelCaseStats = {
   successfulExecutions: number;
 };
 
+type MethodologyExampleRow = {
+  sponsor: SponsorKey;
+  caseType: "real" | "decision_only";
+  caseId: string;
+  caseName: string;
+  mappedChallenges: string[];
+  rationale: string;
+  present: boolean;
+};
+
 type MetricHeaderProps = {
   label: string;
   help: string;
@@ -349,6 +313,14 @@ function passLabel(value: boolean): string {
 
 function docModeLabel(mode: DocMode): string {
   return mode === "with_docs" ? "With Docs Context" : "Without Docs Context";
+}
+
+function executionModeLabel(mode: string | undefined): "real" | "decision_only" {
+  return String(mode || "").toLowerCase() === "real" ? "real" : "decision_only";
+}
+
+function executionModeText(mode: "real" | "decision_only"): string {
+  return mode === "real" ? "Real workflow" : "Decision-only";
 }
 
 function caseSponsors(caseDef: ReadinessScenario | undefined, fallbackExecutionMode: string): SponsorKey[] {
@@ -954,6 +926,51 @@ export default function HomePage() {
     });
   }, [data?.scenarios]);
 
+  const methodologyExampleRows = useMemo(() => {
+    const scenarios = data?.scenarios ?? [];
+    const rows: MethodologyExampleRow[] = [];
+    const caseTypes: Array<"real" | "decision_only"> = ["real", "decision_only"];
+
+    for (const sponsor of SPONSORS) {
+      for (const caseType of caseTypes) {
+        const scenario = scenarios.find((item) => {
+          const targets = caseSponsors(item, item.executionMode);
+          return targets.includes(sponsor) && executionModeLabel(item.executionMode) === caseType;
+        });
+        if (!scenario) {
+          rows.push({
+            sponsor,
+            caseType,
+            caseId: "-",
+            caseName: "No mapped case in current suite version",
+            mappedChallenges: [],
+            rationale: "Add a scenario mapped to this sponsor/case-type pair if you want this cell benchmarked.",
+            present: false,
+          });
+          continue;
+        }
+
+        const challengeTargets = Array.isArray(scenario.challengeTargets) ? scenario.challengeTargets : [];
+        const mappedChallenges = challengeTargets
+          .filter((item) => String(item?.sponsor || "") === sponsor)
+          .map((item) => String(item?.challenge || "").trim())
+          .filter(Boolean);
+
+        rows.push({
+          sponsor,
+          caseType,
+          caseId: String(scenario.id || "-"),
+          caseName: String(scenario.name || "Unnamed scenario"),
+          mappedChallenges,
+          rationale: String(scenario.representativeRationale || "No representative rationale provided in suite."),
+          present: true,
+        });
+      }
+    }
+
+    return rows;
+  }, [data?.scenarios]);
+
   const activeModelCaseRows = useMemo(() => {
     return activeModeResultRows
       .filter((row) => row.model === activeModel)
@@ -978,18 +995,6 @@ export default function HomePage() {
       if (previous.length >= 8) return previous;
       return [...previous, model];
     });
-  }
-
-  function applyModelPreset(models: string[], label: string) {
-    const available = data?.availableModels ?? [];
-    const eligible = models.filter((item) => available.includes(item)).slice(0, 8);
-    if (eligible.length < 2) {
-      setRunSummary(`Preset "${label}" needs at least 2 installed models. Install missing models and retry.`);
-      return;
-    }
-    setCustomModels("");
-    setSelectedModels(eligible);
-    setRunSummary(`Preset "${label}" loaded: ${eligible.join(", ")}.`);
   }
 
   async function handleRun() {
@@ -1156,6 +1161,89 @@ export default function HomePage() {
                 Mappings are declared per case via <code>challengeTargets</code> in the suite. This table is not inferred from score outcomes.
               </p>
             </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <Card className="border-[#4a4a46] bg-soft p-4">
+                <p className="text-sm font-semibold text-stone-100">Mapped-case methodology</p>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="data-table min-w-full text-left text-xs">
+                    <thead className="text-stone-300">
+                      <tr>
+                        <th className="px-2 py-2">Term</th>
+                        <th className="px-2 py-2">How it is computed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t border-[#4a4a46]">
+                        <td className="px-2 py-2 font-medium">Mapped case</td>
+                        <td className="px-2 py-2">
+                          Scenario includes sponsor in <code>challengeTargets</code> (or explicit source fallback if targets are missing).
+                        </td>
+                      </tr>
+                      <tr className="border-t border-[#4a4a46]">
+                        <td className="px-2 py-2 font-medium">Real case</td>
+                        <td className="px-2 py-2">
+                          <code>executionMode=real</code>. If model passes the gate, the workflow runner executes integration steps.
+                        </td>
+                      </tr>
+                      <tr className="border-t border-[#4a4a46]">
+                        <td className="px-2 py-2 font-medium">Decision-only case</td>
+                        <td className="px-2 py-2">
+                          <code>executionMode=decision_only</code>. No workflow execution; score covers decision correctness and docs grounding only.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              <Card className="border-[#4a4a46] bg-soft p-4">
+                <p className="text-sm font-semibold text-stone-100">Representative sponsor x case-type examples</p>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="data-table min-w-full text-left text-xs">
+                    <thead className="text-stone-300">
+                      <tr>
+                        <th className="px-2 py-2">Sponsor</th>
+                        <th className="px-2 py-2">Case Type</th>
+                        <th className="px-2 py-2">Example Case</th>
+                        <th className="px-2 py-2">Mapped Challenge(s)</th>
+                        <th className="px-2 py-2">Why this case exists</th>
+                        <th className="px-2 py-2">How scored</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {methodologyExampleRows.map((row) => (
+                        <tr key={`method-${row.sponsor}-${row.caseType}`} className="border-t border-[#4a4a46]">
+                          <td className="px-2 py-2 font-medium">{row.sponsor}</td>
+                          <td className="px-2 py-2">{executionModeText(row.caseType)}</td>
+                          <td className="px-2 py-2">
+                            {row.present ? (
+                              <span>
+                                {row.caseName} (<code>{row.caseId}</code>)
+                              </span>
+                            ) : (
+                              <span className="text-stone-400">not present in suite</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">{row.mappedChallenges.length ? row.mappedChallenges.join(" | ") : "-"}</td>
+                          <td className="px-2 py-2">{row.rationale}</td>
+                          <td className="px-2 py-2">
+                            {row.present
+                              ? row.caseType === "real"
+                                ? "Policy+docs scoring plus live workflow execution when gate passes."
+                                : "Policy+docs scoring only (no workflow execution)."
+                              : row.rationale}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 text-xs text-stone-400">
+                  Rationale source: suite field <code>representativeRationale</code>.
+                </p>
+              </Card>
+            </div>
           </Disclosure>
         </section>
 
@@ -1199,26 +1287,6 @@ export default function HomePage() {
                 </select>
               </div>
 
-              <Card className="space-y-3 border-[#4a4a46] bg-soft p-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-stone-100">
-                  <Cpu size={15} />
-                  Suggested model sets
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {MODEL_PRESETS.map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => applyModelPreset(preset.models, preset.label)}
-                      className="rounded-full border border-[#4a4a46] bg-[#1f1d1a] px-3 py-1.5 text-xs font-semibold text-stone-100 transition hover:border-accent/50 hover:bg-accent/20"
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-stone-400">Presets only apply installed models.</p>
-              </Card>
-
               <p className="text-sm font-medium">Models to evaluate (2 to 8)</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {(data?.availableModels ?? []).map((model) => {
@@ -1252,34 +1320,6 @@ export default function HomePage() {
                 <p className="text-xs text-amber-200">No Ollama models detected. Install at least 2 text models first.</p>
               ) : null}
 
-              <Card className="space-y-3 bg-soft p-4">
-                <p className="text-sm font-medium">Gemma 4 variants (latest official)</p>
-                <div className="overflow-x-auto">
-                  <table className="data-table min-w-full text-left text-xs">
-                    <thead className="text-stone-300">
-                      <tr>
-                        <th className="px-2 py-2">Tag</th>
-                        <th className="px-2 py-2">Variant</th>
-                        <th className="px-2 py-2">Parameters</th>
-                        <th className="px-2 py-2">Fit class</th>
-                        <th className="px-2 py-2">Installed</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {GEMMA4_VARIANTS.map((variant) => (
-                        <tr key={variant.tag} className="border-t border-[#4a4a46]">
-                          <td className="px-2 py-2 font-mono text-[11px]">{variant.tag}</td>
-                          <td className="px-2 py-2">{variant.label}</td>
-                          <td className="px-2 py-2">{variant.params}</td>
-                          <td className="px-2 py-2">{variant.className}</td>
-                          <td className="px-2 py-2">{data?.availableModels.includes(variant.tag) ? "yes" : "no"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
               <Card className="space-y-2 bg-soft p-4">
                 <label htmlFor="custom-models" className="text-sm font-medium">
                   Manual model list (comma-separated)
@@ -1288,10 +1328,13 @@ export default function HomePage() {
                   id="custom-models"
                   value={customModels}
                   onChange={(event) => setCustomModels(event.target.value)}
-                  placeholder="gemma4:e4b,qwen3:4b-instruct,phi4:14b"
+                  placeholder="gpt-5.4-mini,gpt-5.4-nano,qwen3:4b-instruct,qwen2.5:0.5b"
                   className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                 />
                 <p className="text-xs text-stone-400">Effective models: {effectiveModels.length ? effectiveModels.join(", ") : "-"}</p>
+                <p className="text-xs text-stone-400">
+                  Mixed run is supported: OpenAI models and Ollama local tags can run together in one benchmark.
+                </p>
               </Card>
 
               {runtime === "openai_compat" ? (

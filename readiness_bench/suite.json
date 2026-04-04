@@ -172,6 +172,10 @@
       },
       "challengeTargets": [
         {
+          "sponsor": "Hedera",
+          "challenge": "AI & Agentic Payments on Hedera"
+        },
+        {
           "sponsor": "Ledger",
           "challenge": "AI Agents x Ledger"
         },
@@ -280,6 +284,10 @@
       },
       "challengeTargets": [
         {
+          "sponsor": "Hedera",
+          "challenge": "AI & Agentic Payments on Hedera"
+        },
+        {
           "sponsor": "Ledger",
           "challenge": "AI Agents x Ledger"
         },
@@ -326,6 +334,10 @@
         ]
       },
       "challengeTargets": [
+        {
+          "sponsor": "Hedera",
+          "challenge": "AI & Agentic Payments on Hedera"
+        },
         {
           "sponsor": "Ledger",
           "challenge": "AI Agents x Ledger"
