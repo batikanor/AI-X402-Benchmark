@@ -836,7 +836,9 @@ async function callModel({ runtime, model, prompt, maxTokens, temperature, apiBa
 
   let response;
   if (routedRuntime === 'ollama') {
-    response = await callOllama({ model: routedModel, prompt, maxTokens, temperature, apiBaseUrl });
+    // When mixed-provider mode is used (runtime=openai_compat), keep Ollama on local endpoint.
+    const ollamaApiBaseUrl = runtime === 'ollama' ? apiBaseUrl : undefined;
+    response = await callOllama({ model: routedModel, prompt, maxTokens, temperature, apiBaseUrl: ollamaApiBaseUrl });
   } else if (routedRuntime === 'openai_compat') {
     response = await callOpenAICompat({ model: routedModel, prompt, maxTokens, temperature, apiBaseUrl, apiKeyEnv });
   } else {
