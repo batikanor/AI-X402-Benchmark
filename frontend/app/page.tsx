@@ -1,7 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Brain, ChevronDown, Gauge, RefreshCw, ShieldCheck, Timer, Workflow } from "lucide-react";
+import {
+  AlertTriangle,
+  Brain,
+  CheckCircle2,
+  ChevronDown,
+  Cpu,
+  Gauge,
+  ListChecks,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Timer,
+  Workflow,
+  XCircle,
+} from "lucide-react";
 import useSWR from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +50,23 @@ const GEMMA4_VARIANTS = [
     label: "31B dense",
     params: "30.7B total",
     className: "High-end workstation",
+  },
+];
+const MODEL_PRESETS = [
+  {
+    id: "phone",
+    label: "Phone-size pack",
+    models: ["qwen2.5:0.5b", "qwen3:4b-instruct", "gemma4:e2b", "gemma4:e4b"],
+  },
+  {
+    id: "balanced",
+    label: "Balanced pack",
+    models: ["qwen3:4b-instruct", "gemma4:e4b", "gemma3:12b-it-qat", "phi4:14b"],
+  },
+  {
+    id: "capacity",
+    label: "Capacity pack",
+    models: ["gemma4:26b", "gemma4:31b", "phi4:14b", "deepseek-r1:14b"],
   },
 ];
 
@@ -82,7 +113,7 @@ type DisclosureProps = {
 
 function Disclosure({ title, subtitle, children, defaultOpen = false }: DisclosureProps) {
   return (
-    <details open={defaultOpen} className="group rounded-xl border border-white/10 bg-soft/40 p-4">
+    <details open={defaultOpen} className="group rounded-2xl border border-white/10 bg-soft/35 p-4 backdrop-blur-sm">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
         <div>
           <p className="text-sm font-semibold text-slate-100">{title}</p>
@@ -123,6 +154,13 @@ function parseModelCsv(value: string): string[] {
     .map((item) => item.trim())
     .filter(Boolean);
   return Array.from(new Set(items)).slice(0, 8);
+}
+
+function toneForRate(value: number | undefined): string {
+  if (value === undefined || Number.isNaN(value)) return "text-slate-200";
+  if (value >= 85) return "text-emerald-300";
+  if (value >= 60) return "text-amber-200";
+  return "text-rose-300";
 }
 
 type HumanTask = {
@@ -266,6 +304,13 @@ export default function HomePage() {
       return a.avgTotalLatencyMs - b.avgTotalLatencyMs;
     });
   }, [data?.models]);
+  const modelParamsByName = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (const row of data?.models ?? []) {
+      map.set(row.model, row.paramsBillions ?? null);
+    }
+    return map;
+  }, [data?.models]);
 
   const leader = sortedModels[0];
 
@@ -391,6 +436,9 @@ export default function HomePage() {
     if (parsed.length) return parsed;
     return selectedModels;
   }, [customModels, selectedModels]);
+  const integrationsReady = data?.track.integrationStatus?.isFullyConfigured ?? false;
+  const runStatusTone = integrationsReady ? "text-emerald-200" : "text-amber-200";
+  const runStatusLabel = integrationsReady ? "Integrations ready for explicit external endpoints." : "Using local integration fallbacks for missing explicit endpoints.";
 
   function toggleModelSelection(model: string) {
     setSelectedModels((previous) => {
@@ -402,6 +450,20 @@ export default function HomePage() {
       }
       return [...previous, model];
     });
+  }
+
+  function applyModelPreset(models: string[], label: string) {
+    const available = data?.availableModels ?? [];
+    const eligible = models.filter((item) => available.includes(item)).slice(0, 8);
+    if (eligible.length < 2) {
+      setRunSummary(
+        `Preset "${label}" needs at least 2 installed models. Install missing models and try again.`,
+      );
+      return;
+    }
+    setCustomModels("");
+    setSelectedModels(eligible);
+    setRunSummary(`Preset "${label}" loaded with models: ${eligible.join(", ")}.`);
   }
 
   async function handleRun() {
@@ -452,40 +514,57 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
-      <section className="mb-6 space-y-3">
-        <Badge>Control Room</Badge>
-        <h1 className="text-3xl font-semibold tracking-tight">x402Bench LLM Readiness</h1>
-        <p className="max-w-4xl text-sm text-slate-300">
-          One benchmark run, one leaderboard: each model is scored on policy/routing decision quality and on real workflow execution outcomes.
-        </p>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Card className="border-fuchsia-300/20 bg-fuchsia-500/5 p-4">
-            <div className="mb-2 flex items-center gap-2 text-fuchsia-100">
-              <Brain size={16} />
-              <p className="font-semibold">Dimension A: Decision Quality</p>
+    <main className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
+      <section className="mb-6">
+        <Card className="relative overflow-hidden border-cyan-300/20 bg-gradient-to-br from-[#111a33]/95 via-[#0f1930]/95 to-[#122347]/95 p-6 md:p-8">
+          <div className="pointer-events-none absolute -right-12 -top-14 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-8 h-56 w-56 rounded-full bg-emerald-400/10 blur-3xl" />
+          <div className="relative z-10 flex flex-wrap items-start justify-between gap-5">
+            <div className="space-y-3">
+              <Badge className="gap-1 border-cyan-300/35 bg-cyan-300/10 text-cyan-100">
+                <Sparkles size={12} />
+                Cannes Final Build
+              </Badge>
+              <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">x402Bench LLM Readiness</h1>
+              <p className="max-w-4xl text-sm text-slate-200 md:text-[15px]">
+                A single integrated benchmark for judging-ready demos: model decision quality, documentation-grounded policy correctness, and workflow execution reliability in one scoreboard.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {(data?.project.sponsors ?? ["Hedera", "Chainlink", "Ledger"]).map((sponsor) => (
+                  <Badge key={sponsor} className="border-white/25 bg-white/10 text-white">
+                    {sponsor}
+                  </Badge>
+                ))}
+              </div>
             </div>
-            <p className="text-sm text-slate-200">
-              Checks if the model returns the correct decision, approval requirement, and priority for each payment scenario.
-            </p>
-          </Card>
-          <Card className="border-cyan-300/20 bg-cyan-500/5 p-4">
-            <div className="mb-2 flex items-center gap-2 text-cyan-100">
-              <Workflow size={16} />
-              <p className="font-semibold">Dimension B: Execution Reliability</p>
+            <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-black/20 p-4 backdrop-blur-sm">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Latest Run</p>
+              <p className="mt-1 truncate text-sm font-medium text-slate-100">{data?.latest?.runId ?? "No run yet"}</p>
+              <p className="mt-1 text-xs text-slate-400">{formatDateTime(data?.latest?.finishedAt)}</p>
+              <p className={`mt-3 text-xs ${runStatusTone}`}>{runStatusLabel}</p>
             </div>
-            <p className="text-sm text-slate-200">
-              If the decision is correct and executable, the workflow runs through Chainlink, Hedera, and Ledger controls and is scored on success and latency.
-            </p>
-          </Card>
-        </div>
-        <div className="flex flex-wrap gap-2 pt-1">
-          {(data?.project.sponsors ?? ["Hedera", "Chainlink", "Ledger"]).map((sponsor) => (
-            <Badge key={sponsor} className="border-white/20 bg-white/5 text-white">
-              {sponsor}
-            </Badge>
-          ))}
-        </div>
+          </div>
+          <div className="relative z-10 mt-6 grid gap-3 md:grid-cols-2">
+            <Card className="border-fuchsia-300/20 bg-fuchsia-500/10 p-4">
+              <div className="mb-2 flex items-center gap-2 text-fuchsia-100">
+                <Brain size={16} />
+                <p className="font-semibold">Dimension A: Decision Quality</p>
+              </div>
+              <p className="text-sm text-slate-200">
+                Measures structured decision correctness: allow/block, approval gate, priority, risk level, control selection, and documentation grounding.
+              </p>
+            </Card>
+            <Card className="border-cyan-300/20 bg-cyan-500/10 p-4">
+              <div className="mb-2 flex items-center gap-2 text-cyan-100">
+                <Workflow size={16} />
+                <p className="font-semibold">Dimension B: Execution Reliability</p>
+              </div>
+              <p className="text-sm text-slate-200">
+                Runs eligible scenarios through Chainlink orchestration, Hedera settlement, and Ledger checks, then scores reliability and latency.
+              </p>
+            </Card>
+          </div>
+        </Card>
       </section>
 
       {error ? (
@@ -549,6 +628,28 @@ export default function HomePage() {
                 </select>
               </div>
 
+              <Card className="space-y-3 bg-soft/50 p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-100">
+                  <Cpu size={15} />
+                  Quick model presets
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {MODEL_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => applyModelPreset(preset.models, preset.label)}
+                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-cyan-200/50 hover:bg-cyan-300/10"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-400">
+                  Presets select only currently installed models. Install missing models to unlock full packs.
+                </p>
+              </Card>
+
               <p className="text-sm font-medium">Select models to benchmark (2 to 8)</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {(data?.availableModels ?? []).map((model) => {
@@ -561,7 +662,12 @@ export default function HomePage() {
                         checked ? "border-accent bg-accent/15" : "border-white/15 bg-soft/60"
                       }`}
                     >
-                      <span className="truncate pr-2">{model}</span>
+                      <span className="truncate pr-2">
+                        {model}
+                        <span className="ml-2 text-xs text-slate-400">
+                          {paramsLabel(modelParamsByName.get(model))}
+                        </span>
+                      </span>
                       <span className="flex items-center gap-2">
                         {recommended ? <Badge className="border-white/20 bg-white/10 text-white">recommended</Badge> : null}
                         <input
@@ -587,7 +693,7 @@ export default function HomePage() {
                   Use edge variants when you want a phone-capable comparison baseline.
                 </p>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-xs">
+                  <table className="data-table min-w-full text-left text-xs">
                     <thead className="text-slate-300">
                       <tr>
                         <th className="px-2 py-2">Tag</th>
@@ -709,7 +815,11 @@ export default function HomePage() {
               </Card>
             </div>
 
-            <Card className="space-y-3 bg-soft/50 p-4">
+            <Card className="space-y-4 border-cyan-200/20 bg-gradient-to-br from-cyan-300/10 to-emerald-300/10 p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-100">Run Panel</p>
+                <p className="text-xs text-slate-300">Launch one full benchmark run across all selected models and scenarios.</p>
+              </div>
               <div className="space-y-1">
                 <label htmlFor="runs-per-scenario" className="text-sm font-medium">
                   Runs per scenario
@@ -729,40 +839,53 @@ export default function HomePage() {
                 <RefreshCw size={16} className={running ? "animate-spin" : ""} />
                 {running ? "Running integrated benchmark..." : "Run Readiness Benchmark"}
               </Button>
-              <p className="text-xs text-slate-300">{runSummary || "Run status will appear here."}</p>
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <p className="text-[11px] uppercase tracking-[0.1em] text-slate-400">Run status</p>
+                <p className="mt-1 text-xs text-slate-200">{runSummary || "Run status will appear here."}</p>
+              </div>
+              <div className="space-y-1 text-xs text-slate-300">
+                <p>Readiness checklist</p>
+                <p>- Minimum 2 models selected</p>
+                <p>- Docs grounding configured</p>
+                <p>- Integrations reachable (explicit or local fallback)</p>
+              </div>
             </Card>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Card className="space-y-2 bg-soft/50 p-4">
+            <Card className="space-y-2 border-cyan-200/20 bg-soft/50 p-4">
               <div className="flex items-center gap-2 text-slate-300">
                 <Gauge size={16} /> Leader Score
               </div>
-              <p className="text-3xl font-semibold">{leader ? metricLabel(leader.overallScore) : "-"}</p>
+              <p className={`text-3xl font-semibold ${toneForRate(leader?.overallScore)}`}>{leader ? metricLabel(leader.overallScore) : "-"}</p>
+              <p className="text-xs text-slate-400">{leader ? leader.model : "No run data yet"}</p>
             </Card>
-            <Card className="space-y-2 bg-soft/50 p-4">
+            <Card className="space-y-2 border-fuchsia-200/20 bg-soft/50 p-4">
               <div className="flex items-center gap-2 text-slate-300">
                 <Brain size={16} /> Decision Accuracy
               </div>
-              <p className="text-3xl font-semibold">{leader ? metricLabel(leader.decisionAccuracyPct, "%") : "-"}</p>
+              <p className={`text-3xl font-semibold ${toneForRate(leader?.decisionAccuracyPct)}`}>{leader ? metricLabel(leader.decisionAccuracyPct, "%") : "-"}</p>
+              <p className="text-xs text-slate-400">Policy, priority, risk, controls, docs.</p>
             </Card>
-            <Card className="space-y-2 bg-soft/50 p-4">
+            <Card className="space-y-2 border-emerald-200/20 bg-soft/50 p-4">
               <div className="flex items-center gap-2 text-slate-300">
                 <ShieldCheck size={16} /> Workflow Success
               </div>
-              <p className="text-3xl font-semibold">{leader ? metricLabel(leader.workflowSuccessRatePct, "%") : "-"}</p>
+              <p className={`text-3xl font-semibold ${toneForRate(leader?.workflowSuccessRatePct)}`}>{leader ? metricLabel(leader.workflowSuccessRatePct, "%") : "-"}</p>
+              <p className="text-xs text-slate-400">Only eligible cases attempt execution.</p>
             </Card>
-            <Card className="space-y-2 bg-soft/50 p-4">
+            <Card className="space-y-2 border-sky-200/20 bg-soft/50 p-4">
               <div className="flex items-center gap-2 text-slate-300">
                 <Timer size={16} /> P95 Total
               </div>
               <p className="text-3xl font-semibold">{leader ? metricLabel(leader.p95TotalLatencyMs, " ms") : "-"}</p>
+              <p className="text-xs text-slate-400">End-to-end benchmark latency at p95.</p>
             </Card>
           </div>
 
           <Disclosure title="Leaderboard table" subtitle="Per-model score components" defaultOpen>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="data-table min-w-full text-left text-sm">
                 <thead className="text-slate-300">
                   <tr>
                     <th className="px-2 py-2">Model</th>
@@ -814,16 +937,46 @@ export default function HomePage() {
 
           <Disclosure title="Task Definitions" subtitle="Human-readable checks scored on every run">
             <div className="grid gap-2 text-sm text-slate-200 md:grid-cols-2">
-              <p>1. Return parseable structured output.</p>
-              <p>2. Choose correct allow/block decision.</p>
-              <p>3. Set approval requirement correctly.</p>
-              <p>4. Set priority correctly.</p>
-              <p>5. Set risk level correctly.</p>
-              <p>6. Select required controls.</p>
-              <p>7. Ground answer in required official docs.</p>
-              <p>8. Provide valid citations.</p>
-              <p>9. Pass execution-eligibility gates.</p>
-              <p>10. Complete execution path (or pass as decision-only case).</p>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Return parseable structured output.</p>
+              </Card>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Choose correct allow/block decision.</p>
+              </Card>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Set approval requirement correctly.</p>
+              </Card>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Set priority correctly.</p>
+              </Card>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Set risk level correctly.</p>
+              </Card>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Select required controls.</p>
+              </Card>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Ground answer in required official docs.</p>
+              </Card>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Provide valid citations.</p>
+              </Card>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Pass execution-eligibility gates.</p>
+              </Card>
+              <Card className="flex items-start gap-2 bg-black/20 p-3">
+                <ListChecks size={15} className="mt-0.5 text-cyan-200" />
+                <p>Complete execution path (or pass as decision-only case).</p>
+              </Card>
             </div>
           </Disclosure>
 
@@ -833,7 +986,7 @@ export default function HomePage() {
                 const checklist = buildHumanTaskChecklist(row);
                 const passedCount = checklist.filter((item) => item.passed).length;
                 return (
-                  <Card key={`${row.model}-${row.caseId}`} className="bg-soft/50 p-4">
+                  <Card key={`${row.model}-${row.caseId}`} className="border-white/15 bg-soft/55 p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
                       <Badge className="border-white/20 bg-white/10 text-white">{row.model}</Badge>
                       <Badge className="border-white/20 bg-white/5 text-white">{row.caseName}</Badge>
@@ -847,11 +1000,17 @@ export default function HomePage() {
                     </div>
                     <div className="space-y-2 text-sm">
                       {checklist.map((task) => (
-                        <div key={task.label} className="rounded-lg border border-white/10 bg-black/15 px-3 py-2">
-                          <p className="font-medium text-slate-100">
+                        <div
+                          key={task.label}
+                          className={`rounded-lg border px-3 py-2 ${
+                            task.passed ? "border-emerald-300/25 bg-emerald-300/10" : "border-rose-300/25 bg-rose-300/10"
+                          }`}
+                        >
+                          <p className="flex items-center gap-2 font-medium text-slate-100">
+                            {task.passed ? <CheckCircle2 size={14} className="text-emerald-200" /> : <XCircle size={14} className="text-rose-200" />}
                             {task.label}: {passLabel(task.passed)}
                           </p>
-                          <p className="mt-1 text-xs text-slate-300">{task.detail}</p>
+                          <p className="mt-1 text-xs text-slate-100/90">{task.detail}</p>
                         </div>
                       ))}
                     </div>
@@ -884,7 +1043,7 @@ export default function HomePage() {
                     Required docs: {(row.scenario.requiredSources ?? []).join(", ") || "none"}
                   </p>
                   <div className="mt-3 overflow-x-auto">
-                    <table className="min-w-full text-left text-xs">
+                    <table className="data-table min-w-full text-left text-xs">
                       <thead className="text-slate-300">
                         <tr>
                           <th className="px-2 py-2">Model</th>

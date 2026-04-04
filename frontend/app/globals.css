@@ -12,7 +12,27 @@ body {
   background:
     radial-gradient(circle at 15% 20%, rgba(43, 212, 189, 0.18), transparent 45%),
     radial-gradient(circle at 80% 10%, rgba(110, 231, 255, 0.16), transparent 42%),
+    radial-gradient(circle at 70% 90%, rgba(45, 94, 194, 0.2), transparent 44%),
     #0b1020;
   color: #e6edf6;
   font-family: "Sora", "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(110, 231, 255, 0.28);
+}
+
+.data-table th {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9eb0cd;
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.015);
 }
