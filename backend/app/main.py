@@ -275,7 +275,7 @@ def _workflow_definition() -> dict[str, Any]:
     integration_status = _integration_status(config)
 
     return {
-        "name": "Agentic payments workflow benchmark",
+        "name": "Payment workflow reliability benchmark",
         "whatIsBenchmarked": "Policy gate, orchestration, settlement, and service probe reliability for payment scenarios.",
         "mocked": False,
         "suiteId": suite.get("id"),
@@ -381,8 +381,8 @@ def _build_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "project": {
-            "name": "x402Bench Agentic Payments",
-            "tagline": "Benchmarking AI-agent payment reliability across Hedera, Chainlink, and Ledger policy gates.",
+            "name": "x402Bench Payment Reliability",
+            "tagline": "Benchmarking payment workflow reliability across Hedera, Chainlink, and Ledger policy gates.",
             "sponsors": ["Hedera", "Chainlink", "Ledger"],
         },
         "benchmarkDefinition": {
@@ -677,8 +677,8 @@ def dashboard() -> dict[str, Any]:
     if latest is None:
         return {
             "project": {
-                "name": "x402Bench Agentic Payments",
-                "tagline": "Benchmarking AI-agent payment reliability across Hedera, Chainlink, and Ledger policy gates.",
+                "name": "x402Bench Payment Reliability",
+                "tagline": "Benchmarking payment workflow reliability across Hedera, Chainlink, and Ledger policy gates.",
                 "sponsors": ["Hedera", "Chainlink", "Ledger"],
             },
             "benchmarkDefinition": {

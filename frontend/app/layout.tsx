@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "x402Bench Control Room",
-  description: "Operations dashboard for x402Bench agentic payments benchmark.",
+  description: "Operations dashboard for x402Bench payment reliability and LLM decision benchmarks.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

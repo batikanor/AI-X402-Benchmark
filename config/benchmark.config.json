@@ -1,7 +1,7 @@
 {
   "suite": {
     "id": "x402bench-cannes",
-    "name": "x402Bench Agentic Payments Benchmark",
+    "name": "x402Bench Payment Reliability Benchmark",
     "minPassingScore": 75
   },
   "defaultRetryPolicy": {
