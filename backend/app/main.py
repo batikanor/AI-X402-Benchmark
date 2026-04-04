@@ -22,9 +22,9 @@ LLM_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_ollama_llm_benchmark.mjs"
 
 MODEL_NAME_REGEX = re.compile(r"^[A-Za-z0-9._:/-]+$")
 
-RUN_LOCK = threading.Lock()
+RUN_COND = threading.Condition()
 RUN_IN_PROGRESS = False
-LLM_RUN_LOCK = threading.Lock()
+LLM_RUN_COND = threading.Condition()
 LLM_RUN_IN_PROGRESS = False
 
 IDEMPOTENCY_CACHE: dict[str, dict[str, Any]] = {}
@@ -69,6 +69,28 @@ def _llm_timeout_seconds() -> int:
     except ValueError as exc:
         raise RuntimeError("LLM_BENCH_RUN_TIMEOUT_SECONDS must be an integer") from exc
     return max(60, min(value, 7200))
+
+
+def _workflow_join_wait_seconds() -> int:
+    raw = os.getenv("WORKFLOW_JOIN_WAIT_SECONDS", "").strip()
+    if not raw:
+        return _timeout_seconds() + 30
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("WORKFLOW_JOIN_WAIT_SECONDS must be an integer") from exc
+    return max(10, min(value, 3600))
+
+
+def _llm_join_wait_seconds() -> int:
+    raw = os.getenv("LLM_JOIN_WAIT_SECONDS", "").strip()
+    if not raw:
+        return _llm_timeout_seconds() + 30
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("LLM_JOIN_WAIT_SECONDS must be an integer") from exc
+    return max(30, min(value, 10800))
 
 
 def _cors_origins() -> list[str]:
@@ -477,32 +499,52 @@ def _cache_put(cache: dict[str, dict[str, Any]], key: str, response: RunResponse
     }
 
 
-def _start_run_or_raise() -> None:
+def _start_run_or_join(timeout_seconds: int) -> str:
     global RUN_IN_PROGRESS
-    with RUN_LOCK:
-        if RUN_IN_PROGRESS:
-            raise HTTPException(status_code=409, detail="A workflow benchmark run is already in progress.")
-        RUN_IN_PROGRESS = True
+    with RUN_COND:
+        if not RUN_IN_PROGRESS:
+            RUN_IN_PROGRESS = True
+            return "started"
+
+        deadline = time.monotonic() + timeout_seconds
+        while RUN_IN_PROGRESS:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return "timeout"
+            RUN_COND.wait(timeout=remaining)
+
+        return "joined"
 
 
 def _finish_run() -> None:
     global RUN_IN_PROGRESS
-    with RUN_LOCK:
+    with RUN_COND:
         RUN_IN_PROGRESS = False
+        RUN_COND.notify_all()
 
 
-def _start_llm_run_or_raise() -> None:
+def _start_llm_run_or_join(timeout_seconds: int) -> str:
     global LLM_RUN_IN_PROGRESS
-    with LLM_RUN_LOCK:
-        if LLM_RUN_IN_PROGRESS:
-            raise HTTPException(status_code=409, detail="An LLM benchmark run is already in progress.")
-        LLM_RUN_IN_PROGRESS = True
+    with LLM_RUN_COND:
+        if not LLM_RUN_IN_PROGRESS:
+            LLM_RUN_IN_PROGRESS = True
+            return "started"
+
+        deadline = time.monotonic() + timeout_seconds
+        while LLM_RUN_IN_PROGRESS:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return "timeout"
+            LLM_RUN_COND.wait(timeout=remaining)
+
+        return "joined"
 
 
 def _finish_llm_run() -> None:
     global LLM_RUN_IN_PROGRESS
-    with LLM_RUN_LOCK:
+    with LLM_RUN_COND:
         LLM_RUN_IN_PROGRESS = False
+        LLM_RUN_COND.notify_all()
 
 
 def _extract_run_id_from_stdout(stdout: str) -> str | None:
@@ -661,8 +703,28 @@ def run_benchmark(payload: RunRequest, idempotency_key: str | None = Header(defa
         if cached is not None:
             return cached
 
-    _start_run_or_raise()
     started = time.perf_counter()
+    run_state = _start_run_or_join(_workflow_join_wait_seconds())
+    if run_state == "timeout":
+        raise HTTPException(
+            status_code=409,
+            detail=f"A workflow benchmark run is already in progress and did not finish within {_workflow_join_wait_seconds()} seconds.",
+        )
+    if run_state == "joined":
+        latest = _latest_workflow_report()
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        response = RunResponse(
+            ok=True,
+            returnCode=0,
+            stdout="Joined an in-progress workflow run and returned the latest completed result.",
+            stderr="",
+            runId=latest.stem if latest else None,
+            durationMs=duration_ms,
+        )
+        if idempotency_key:
+            _cache_put(IDEMPOTENCY_CACHE, idempotency_key, response)
+        return response
+
     try:
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
         command = [
@@ -757,8 +819,27 @@ def run_llm_benchmark(payload: LlmRunRequest, idempotency_key: str | None = Head
     available_models = _list_ollama_models()
     models = _validate_models_or_raise(payload.models, available_models)
 
-    _start_llm_run_or_raise()
     started = time.perf_counter()
+    run_state = _start_llm_run_or_join(_llm_join_wait_seconds())
+    if run_state == "timeout":
+        raise HTTPException(
+            status_code=409,
+            detail=f"An LLM benchmark run is already in progress and did not finish within {_llm_join_wait_seconds()} seconds.",
+        )
+    if run_state == "joined":
+        latest = _latest_llm_report()
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        response = RunResponse(
+            ok=True,
+            returnCode=0,
+            stdout="Joined an in-progress LLM run and returned the latest completed result.",
+            stderr="",
+            runId=latest.stem if latest else None,
+            durationMs=duration_ms,
+        )
+        if idempotency_key:
+            _cache_put(LLM_IDEMPOTENCY_CACHE, idempotency_key, response)
+        return response
 
     try:
         LLM_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
