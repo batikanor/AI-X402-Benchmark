@@ -6,9 +6,10 @@ import useSWR from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { fetchReadinessDashboard, runReadinessBenchmark } from "@/lib/api";
+import { fetchReadinessDashboard, runReadinessBenchmark, type ReadinessDashboardResponse } from "@/lib/api";
 
 type RuntimeMode = "ollama" | "openai_compat";
+type ReadinessResult = ReadinessDashboardResponse["results"][number];
 
 const HF_OPENAI_COMPAT_URL = "https://router.huggingface.co/v1";
 const GEMMA4_VARIANTS = [
@@ -122,6 +123,96 @@ function parseModelCsv(value: string): string[] {
     .map((item) => item.trim())
     .filter(Boolean);
   return Array.from(new Set(items)).slice(0, 8);
+}
+
+type HumanTask = {
+  label: string;
+  passed: boolean;
+  detail: string;
+};
+
+function passLabel(value: boolean): string {
+  return value ? "pass" : "fail";
+}
+
+function joinList(values: string[] | undefined): string {
+  const clean = (values ?? []).map((item) => String(item || "").trim()).filter(Boolean);
+  return clean.length ? clean.join(", ") : "none";
+}
+
+function buildHumanTaskChecklist(result: ReadinessResult): HumanTask[] {
+  const expectedControls = result.expected.requiredControls ?? [];
+  const modelControls = result.llm.requiredControls ?? [];
+  const workflowStatus = normalizeWorkflowStatus(result.workflow.status);
+  const workflowSucceeded = workflowStatus === "success";
+
+  const workflowTask: HumanTask =
+    result.executionMode === "decision_only"
+      ? {
+          label: "Run execution path",
+          passed: true,
+          detail: "Case is configured as decision_only, so onchain execution is intentionally skipped.",
+        }
+      : {
+          label: "Run execution path",
+          passed: workflowSucceeded,
+          detail: workflowSucceeded
+            ? `Workflow succeeded in ${metricLabel(result.workflow.durationMs)} ms.`
+            : `Workflow status: ${workflowStatus}. ${rowTopIssue(result.workflow.notes ?? [])}`,
+        };
+
+  return [
+    {
+      label: "Return parseable structured output",
+      passed: Boolean(result.llm.parseOk),
+      detail: result.llm.parseOk
+        ? "Model output parsed successfully."
+        : result.llm.error || "Output parser could not read a valid response payload.",
+    },
+    {
+      label: "Choose the correct decision (allow/block)",
+      passed: Boolean(result.evaluation.decisionMatch),
+      detail: `Expected ${result.expected.decision}; model returned ${result.llm.decision || "unknown"}.`,
+    },
+    {
+      label: "Set approval requirement correctly",
+      passed: Boolean(result.evaluation.approvalMatch),
+      detail: `Expected ${String(result.expected.approvalRequired)}; model returned ${String(result.llm.approvalRequired)}.`,
+    },
+    {
+      label: "Set priority correctly",
+      passed: Boolean(result.evaluation.priorityMatch),
+      detail: `Expected ${result.expected.priority}; model returned ${result.llm.priority || "unknown"}.`,
+    },
+    {
+      label: "Set risk level correctly",
+      passed: Boolean(result.evaluation.riskMatch),
+      detail: `Expected ${result.expected.riskLevel}; model returned ${result.llm.riskLevel || "unknown"}.`,
+    },
+    {
+      label: "Select required controls",
+      passed: (result.evaluation.controlsF1Pct ?? 0) >= 99.9,
+      detail: `Expected: ${joinList(expectedControls)} | Returned: ${joinList(modelControls)} | Controls F1 ${metricLabel(result.evaluation.controlsF1Pct)}%.`,
+    },
+    {
+      label: "Ground answer in required docs",
+      passed: Boolean(result.evaluation.docsGrounded),
+      detail: `Required sources hit: ${joinList(result.evaluation.requiredSourceHits ?? [])}. Coverage ${metricLabel(result.evaluation.requiredSourceCoveragePct)}%.`,
+    },
+    {
+      label: "Provide valid citations",
+      passed: (result.evaluation.citationValidityPct ?? 0) >= 90,
+      detail: `${result.evaluation.validCitationCount ?? 0}/${result.evaluation.citationCount ?? 0} citations valid (${metricLabel(result.evaluation.citationValidityPct)}%).`,
+    },
+    {
+      label: "Be eligible for execution",
+      passed: Boolean(result.evaluation.executionEligible),
+      detail: result.evaluation.executionEligible
+        ? "Decision matched policy gates and execution path was allowed."
+        : "Decision/gating mismatch made this case non-executable.",
+    },
+    workflowTask,
+  ];
 }
 
 export default function HomePage() {
@@ -276,6 +367,24 @@ export default function HomePage() {
       };
     });
   }, [data?.results, data?.scenarios, sortedModels]);
+
+  const taskAuditRows = useMemo(() => {
+    const results = data?.results ?? [];
+    const latestByModelCase = new Map<string, ReadinessResult>();
+    for (const item of results) {
+      const key = `${item.model}::${item.caseId}`;
+      const previous = latestByModelCase.get(key);
+      if (!previous || item.attempt > previous.attempt) {
+        latestByModelCase.set(key, item);
+      }
+    }
+
+    return Array.from(latestByModelCase.values()).sort((a, b) => {
+      if (a.model !== b.model) return a.model.localeCompare(b.model);
+      if (a.caseName !== b.caseName) return a.caseName.localeCompare(b.caseName);
+      return a.attempt - b.attempt;
+    });
+  }, [data?.results]);
 
   const effectiveModels = useMemo(() => {
     const parsed = parseModelCsv(customModels);
@@ -700,6 +809,63 @@ export default function HomePage() {
                   ) : null}
                 </tbody>
               </table>
+            </div>
+          </Disclosure>
+
+          <Disclosure title="Task Definitions" subtitle="Human-readable checks scored on every run">
+            <div className="grid gap-2 text-sm text-slate-200 md:grid-cols-2">
+              <p>1. Return parseable structured output.</p>
+              <p>2. Choose correct allow/block decision.</p>
+              <p>3. Set approval requirement correctly.</p>
+              <p>4. Set priority correctly.</p>
+              <p>5. Set risk level correctly.</p>
+              <p>6. Select required controls.</p>
+              <p>7. Ground answer in required official docs.</p>
+              <p>8. Provide valid citations.</p>
+              <p>9. Pass execution-eligibility gates.</p>
+              <p>10. Complete execution path (or pass as decision-only case).</p>
+            </div>
+          </Disclosure>
+
+          <Disclosure title="Run Task Audit (Human-Readable)" subtitle="Latest attempt per model and scenario">
+            <div className="space-y-4">
+              {taskAuditRows.map((row) => {
+                const checklist = buildHumanTaskChecklist(row);
+                const passedCount = checklist.filter((item) => item.passed).length;
+                return (
+                  <Card key={`${row.model}-${row.caseId}`} className="bg-soft/50 p-4">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                      <Badge className="border-white/20 bg-white/10 text-white">{row.model}</Badge>
+                      <Badge className="border-white/20 bg-white/5 text-white">{row.caseName}</Badge>
+                      <Badge className="border-white/20 bg-white/5 text-white">attempt {row.attempt}</Badge>
+                      <Badge className="border-white/20 bg-white/5 text-white">
+                        tasks passed: {passedCount}/{checklist.length}
+                      </Badge>
+                      <Badge className="border-white/20 bg-white/5 text-white">
+                        total latency: {metricLabel(row.totalLatencyMs)} ms
+                      </Badge>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      {checklist.map((task) => (
+                        <div key={task.label} className="rounded-lg border border-white/10 bg-black/15 px-3 py-2">
+                          <p className="font-medium text-slate-100">
+                            {task.label}: {passLabel(task.passed)}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-300">{task.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 space-y-1 text-xs text-slate-400">
+                      <p>Model reason: {row.llm.reason || "no reason text"}</p>
+                      <p>Citation IDs: {joinList(row.llm.citations ?? [])}</p>
+                      <p>Raw output preview: {row.llm.rawOutputPreview || "n/a"}</p>
+                    </div>
+                  </Card>
+                );
+              })}
+              {!taskAuditRows.length && !isLoading ? (
+                <p className="text-sm text-slate-400">Run the readiness benchmark to generate task-by-task audit rows.</p>
+              ) : null}
             </div>
           </Disclosure>
 
