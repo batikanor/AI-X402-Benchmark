@@ -1084,7 +1084,7 @@ def run_readiness_benchmark(
 
         stdout = process.stdout.strip()
         run_id = _extract_run_id_from_stdout(stdout)
-        if not run_id:
+        if not run_id and process.returncode == 0:
             latest = _latest_readiness_report()
             run_id = latest.stem if latest else None
 

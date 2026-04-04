@@ -405,12 +405,21 @@ async function callOllama({ model, prompt, maxTokens, temperature, apiBaseUrl })
   };
 }
 
+function resolveOpenAICompatApiKey(apiKeyEnv) {
+  const candidates = Array.from(new Set([apiKeyEnv, 'OPENAI_API_KEY', 'HF_TOKEN'].filter(Boolean)));
+  for (const name of candidates) {
+    const value = process.env[name];
+    if (value && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  throw new Error(`Missing API key for openai_compat runtime. Set one of: ${candidates.join(', ')}`);
+}
+
 async function callOpenAICompat({ model, prompt, maxTokens, temperature, apiBaseUrl, apiKeyEnv }) {
   const baseUrl = (apiBaseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  const key = process.env[apiKeyEnv] || process.env.OPENAI_API_KEY || process.env.HF_TOKEN || '';
-  if (!key) {
-    throw new Error(`Missing API key for openai_compat runtime. Set ${apiKeyEnv}, OPENAI_API_KEY, or HF_TOKEN.`);
-  }
+  const key = resolveOpenAICompatApiKey(apiKeyEnv);
 
   const endpoint = `${baseUrl}/chat/completions`;
   const response = await fetch(endpoint, {
@@ -684,6 +693,9 @@ async function main() {
   const models = normalizeModelList(options.models);
   if (models.length < 2) {
     throw new Error('Provide at least two models (comma-separated) for comparative readiness benchmarking.');
+  }
+  if (options.runtime === 'openai_compat') {
+    resolveOpenAICompatApiKey(options.apiKeyEnv);
   }
 
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
