@@ -127,16 +127,16 @@ function MetricHeader({ label, help }: MetricHeaderProps) {
   return (
     <span className="inline-flex items-center gap-1">
       {label}
-      <span className="group relative inline-flex">
+      <span className="relative inline-flex">
         <button
           type="button"
           aria-label={`${label}: ${help}`}
-          className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/35 bg-white/5 text-[10px] font-bold text-gray-200"
+          className="peer inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/35 bg-white/5 text-[10px] font-bold text-gray-200"
           title={help}
         >
           ?
         </button>
-        <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-64 -translate-x-1/2 rounded-md border border-white/15 bg-[#042320] p-2 text-[11px] normal-case text-gray-200 shadow-glow group-hover:block group-focus-within:block">
+        <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-64 -translate-x-1/2 rounded-md border border-white/15 bg-[#042320] p-2 text-[11px] normal-case text-gray-200 shadow-glow peer-hover:block peer-focus-visible:block">
           {help}
         </span>
       </span>
