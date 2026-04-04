@@ -103,18 +103,44 @@ type SponsorAggregate = {
   sponsorScore: number;
 };
 
+type MetricHeaderProps = {
+  label: string;
+  help: string;
+};
+
 function Disclosure({ title, subtitle, children, defaultOpen = false }: DisclosureProps) {
   return (
     <details open={defaultOpen} className="group rounded-2xl border border-white/10 bg-soft/40 p-4 backdrop-blur-sm">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
         <div>
-          <p className="text-sm font-semibold text-slate-100">{title}</p>
-          {subtitle ? <p className="text-xs text-slate-400">{subtitle}</p> : null}
+          <p className="text-sm font-semibold text-gray-100">{title}</p>
+          {subtitle ? <p className="text-xs text-gray-400">{subtitle}</p> : null}
         </div>
-        <ChevronDown size={16} className="text-slate-400 transition group-open:rotate-180" />
+        <ChevronDown size={16} className="text-gray-400 transition group-open:rotate-180" />
       </summary>
       <div className="pt-4">{children}</div>
     </details>
+  );
+}
+
+function MetricHeader({ label, help }: MetricHeaderProps) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {label}
+      <span className="group relative inline-flex">
+        <button
+          type="button"
+          aria-label={`${label}: ${help}`}
+          className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/35 bg-white/5 text-[10px] font-bold text-gray-200"
+          title={help}
+        >
+          ?
+        </button>
+        <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-64 -translate-x-1/2 rounded-md border border-white/15 bg-[#042320] p-2 text-[11px] normal-case text-gray-200 shadow-glow group-hover:block group-focus-within:block">
+          {help}
+        </span>
+      </span>
+    </span>
   );
 }
 
@@ -171,7 +197,7 @@ function rowTopIssue(notes: string[]): string {
 }
 
 function toneForRate(value: number | undefined): string {
-  if (value === undefined || Number.isNaN(value)) return "text-slate-200";
+  if (value === undefined || Number.isNaN(value)) return "text-gray-200";
   if (value >= 85) return "text-emerald-300";
   if (value >= 60) return "text-amber-200";
   return "text-rose-300";
@@ -182,7 +208,7 @@ function statusChipTone(status: string | undefined): string {
   if (normalized === "success") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (normalized === "failed") return "border-rose-300/30 bg-rose-300/10 text-rose-200";
   if (normalized === "blocked" || normalized === "decision mismatch") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
-  return "border-white/20 bg-white/10 text-slate-200";
+  return "border-white/20 bg-white/10 text-gray-200";
 }
 
 function passLabel(value: boolean): string {
@@ -308,6 +334,7 @@ export default function HomePage() {
   const [runSummary, setRunSummary] = useState("");
   const [runTechnicalLog, setRunTechnicalLog] = useState("");
   const [activeModel, setActiveModel] = useState("");
+  const [sponsorShowAllModels, setSponsorShowAllModels] = useState(false);
 
   useEffect(() => {
     if (!data?.availableModels.length) return;
@@ -533,6 +560,12 @@ export default function HomePage() {
       .sort((a, b) => a.caseName.localeCompare(b.caseName));
   }, [latestResultRows, activeModel]);
 
+  const sponsorVisibleModels = useMemo(() => {
+    if (sponsorShowAllModels) return sortedModels;
+    if (!activeModel) return [];
+    return sortedModels.filter((row) => row.model === activeModel);
+  }, [sortedModels, activeModel, sponsorShowAllModels]);
+
   const integrationsReady = data?.track.integrationStatus?.isFullyConfigured ?? false;
   const runStatusTone = integrationsReady ? "text-emerald-200" : "text-amber-200";
   const runStatusLabel = integrationsReady
@@ -619,7 +652,7 @@ export default function HomePage() {
                 Final Presentation UI
               </Badge>
               <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">x402Bench LLM Readiness</h1>
-              <p className="max-w-4xl text-sm text-slate-200 md:text-[15px]">
+              <p className="max-w-4xl text-sm text-gray-200 md:text-[15px]">
                 One integrated benchmark with two levels of reading: a global leaderboard for fast ranking, and one-click model deep dives for detailed judging.
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
@@ -631,9 +664,9 @@ export default function HomePage() {
               </div>
             </div>
             <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-black/20 p-4 backdrop-blur-sm">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Latest Run</p>
-              <p className="mt-1 truncate text-sm font-medium text-slate-100">{data?.latest?.runId ?? "No run yet"}</p>
-              <p className="mt-1 text-xs text-slate-400">{formatDateTime(data?.latest?.finishedAt)}</p>
+              <p className="text-[11px] uppercase tracking-[0.12em] text-gray-400">Latest Run</p>
+              <p className="mt-1 truncate text-sm font-medium text-gray-100">{data?.latest?.runId ?? "No run yet"}</p>
+              <p className="mt-1 text-xs text-gray-400">{formatDateTime(data?.latest?.finishedAt)}</p>
               <p className={`mt-3 text-xs ${runStatusTone}`}>{runStatusLabel}</p>
             </div>
           </div>
@@ -668,7 +701,7 @@ export default function HomePage() {
               </div>
 
               <Card className="space-y-3 border-[#2fc7a3]/20 bg-soft/55 p-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-slate-100">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-100">
                   <Cpu size={15} />
                   Quick model presets
                 </div>
@@ -678,13 +711,13 @@ export default function HomePage() {
                       key={preset.id}
                       type="button"
                       onClick={() => applyModelPreset(preset.models, preset.label)}
-                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-[#3ce2bb]/50 hover:bg-[#3ce2bb]/10"
+                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-100 transition hover:border-[#3ce2bb]/50 hover:bg-[#3ce2bb]/10"
                     >
                       {preset.label}
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-slate-400">Presets only apply installed models.</p>
+                <p className="text-xs text-gray-400">Presets only apply installed models.</p>
               </Card>
 
               <p className="text-sm font-medium">Select models to benchmark (2 to 8)</p>
@@ -701,7 +734,7 @@ export default function HomePage() {
                     >
                       <span className="truncate pr-2">
                         {model}
-                        <span className="ml-2 text-xs text-slate-400">{paramsLabel(modelParamsByName.get(model))}</span>
+                        <span className="ml-2 text-xs text-gray-400">{paramsLabel(modelParamsByName.get(model))}</span>
                       </span>
                       <span className="flex items-center gap-2">
                         {recommended ? <Badge className="border-white/20 bg-white/10 text-white">recommended</Badge> : null}
@@ -724,7 +757,7 @@ export default function HomePage() {
                 <p className="text-sm font-medium">Gemma 4 variants (latest official)</p>
                 <div className="overflow-x-auto">
                   <table className="data-table min-w-full text-left text-xs">
-                    <thead className="text-slate-300">
+                    <thead className="text-gray-300">
                       <tr>
                         <th className="px-2 py-2">Tag</th>
                         <th className="px-2 py-2">Variant</th>
@@ -759,7 +792,7 @@ export default function HomePage() {
                   placeholder="gemma4:e4b,qwen3:4b-instruct,phi4:14b"
                   className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
                 />
-                <p className="text-xs text-slate-400">Effective models: {effectiveModels.length ? effectiveModels.join(", ") : "-"}</p>
+                <p className="text-xs text-gray-400">Effective models: {effectiveModels.length ? effectiveModels.join(", ") : "-"}</p>
               </Card>
 
               {runtime === "openai_compat" ? (
@@ -822,7 +855,7 @@ export default function HomePage() {
                     ))}
                   </select>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-slate-200">
+                <label className="flex items-center gap-2 text-sm text-gray-200">
                   <input
                     type="checkbox"
                     checked={requireCitations}
@@ -836,8 +869,8 @@ export default function HomePage() {
 
             <Card className="space-y-4 border-[#2fc7a3]/20 bg-gradient-to-br from-[#1a3b35]/45 to-[#10312b]/40 p-4">
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-slate-100">Run Panel</p>
-                <p className="text-xs text-slate-300">Launch one integrated benchmark run.</p>
+                <p className="text-sm font-semibold text-gray-100">Run Panel</p>
+                <p className="text-xs text-gray-300">Launch one integrated benchmark run.</p>
               </div>
               <div className="space-y-1">
                 <label htmlFor="runs-per-scenario" className="text-sm font-medium">
@@ -861,11 +894,11 @@ export default function HomePage() {
               </Button>
 
               <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                <p className="text-[11px] uppercase tracking-[0.1em] text-slate-400">Run status</p>
-                <p className="mt-1 text-xs text-slate-200">{runSummary || "Run status will appear here."}</p>
+                <p className="text-[11px] uppercase tracking-[0.1em] text-gray-400">Run status</p>
+                <p className="mt-1 text-xs text-gray-200">{runSummary || "Run status will appear here."}</p>
               </div>
 
-              <div className="space-y-2 text-xs text-slate-300">
+              <div className="space-y-2 text-xs text-gray-300">
                 <p className="font-semibold">Current benchmark coverage</p>
                 <p>Mocked: {data?.track.mocked === false ? "No" : "Unknown"}</p>
                 <p>Cases: {data?.track.scenarioCount ?? "-"}</p>
@@ -877,43 +910,43 @@ export default function HomePage() {
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Card className="space-y-2 border-[#46d7b6]/20 bg-soft/55 p-4">
-              <div className="flex items-center gap-2 text-slate-300">
+              <div className="flex items-center gap-2 text-gray-300">
                 <Gauge size={16} /> Leader Score
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.overallScore)}`}>{leader ? metricLabel(leader.overallScore) : "-"}</p>
-              <p className="text-xs text-slate-400">{leader ? leader.model : "No run data yet"}</p>
+              <p className="text-xs text-gray-400">{leader ? leader.model : "No run data yet"}</p>
             </Card>
             <Card className="space-y-2 border-[#2fc7a3]/20 bg-soft/55 p-4">
-              <div className="flex items-center gap-2 text-slate-300">
+              <div className="flex items-center gap-2 text-gray-300">
                 <Brain size={16} /> Decision Accuracy
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.decisionAccuracyPct)}`}>
                 {leader ? metricLabel(leader.decisionAccuracyPct, "%") : "-"}
               </p>
-              <p className="text-xs text-slate-400">Policy, controls, and documentation correctness.</p>
+              <p className="text-xs text-gray-400">Policy, controls, and documentation correctness.</p>
             </Card>
             <Card className="space-y-2 border-[#3ab798]/20 bg-soft/55 p-4">
-              <div className="flex items-center gap-2 text-slate-300">
+              <div className="flex items-center gap-2 text-gray-300">
                 <ShieldCheck size={16} /> Workflow Success
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.workflowSuccessRatePct)}`}>
                 {leader ? metricLabel(leader.workflowSuccessRatePct, "%") : "-"}
               </p>
-              <p className="text-xs text-slate-400">Only eligible cases attempt execution.</p>
+              <p className="text-xs text-gray-400">Only eligible cases attempt execution.</p>
             </Card>
             <Card className="space-y-2 border-[#2b9980]/20 bg-soft/55 p-4">
-              <div className="flex items-center gap-2 text-slate-300">
+              <div className="flex items-center gap-2 text-gray-300">
                 <Timer size={16} /> P95 Total
               </div>
               <p className="text-3xl font-semibold">{leader ? metricLabel(leader.p95TotalLatencyMs, " ms") : "-"}</p>
-              <p className="text-xs text-slate-400">End-to-end p95 latency.</p>
+              <p className="text-xs text-gray-400">End-to-end p95 latency.</p>
             </Card>
           </div>
 
           <Disclosure title="General Leaderboard" subtitle="Global performance across all scored dimensions" defaultOpen>
             <div className="overflow-x-auto">
               <table className="data-table min-w-full text-left text-sm">
-                <thead className="text-slate-300">
+                <thead className="text-gray-300">
                   <tr>
                     <th className="px-2 py-2">Model</th>
                     <th className="px-2 py-2">Params (B)</th>
@@ -942,7 +975,7 @@ export default function HomePage() {
                   ))}
                   {!sortedModels.length && !isLoading ? (
                     <tr>
-                      <td className="px-2 py-3 text-slate-400" colSpan={9}>
+                      <td className="px-2 py-3 text-gray-400" colSpan={9}>
                         No readiness benchmark results yet.
                       </td>
                     </tr>
@@ -954,7 +987,38 @@ export default function HomePage() {
 
           <Disclosure title="Sponsor Breakdown" subtitle="Per-sponsor quality and execution signal by model" defaultOpen>
             <div className="space-y-4">
-              {sortedModels.map((modelRow) => {
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSponsorShowAllModels(true)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    sponsorShowAllModels
+                      ? "border-[#41d8b6] bg-[#41d8b6]/15 text-[#a6f5e3]"
+                      : "border-white/20 bg-white/5 text-gray-200 hover:border-[#41d8b6]/40 hover:bg-[#41d8b6]/10"
+                  }`}
+                >
+                  All models
+                </button>
+                {sortedModels.map((row) => (
+                  <button
+                    key={`sponsor-filter-${row.model}`}
+                    type="button"
+                    onClick={() => {
+                      setActiveModel(row.model);
+                      setSponsorShowAllModels(false);
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      !sponsorShowAllModels && activeModel === row.model
+                        ? "border-[#41d8b6] bg-[#41d8b6]/15 text-[#a6f5e3]"
+                        : "border-white/20 bg-white/5 text-gray-200 hover:border-[#41d8b6]/40 hover:bg-[#41d8b6]/10"
+                    }`}
+                  >
+                    {row.model}
+                  </button>
+                ))}
+              </div>
+
+              {sponsorVisibleModels.map((modelRow) => {
                 const rows = sponsorBreakdownByModel.get(modelRow.model) ?? [];
                 return (
                   <Card key={modelRow.model} className="bg-soft/55 p-4">
@@ -964,14 +1028,34 @@ export default function HomePage() {
                     </div>
                     <div className="overflow-x-auto">
                       <table className="data-table min-w-full text-left text-xs">
-                        <thead className="text-slate-300">
+                        <thead className="text-gray-300">
                           <tr>
                             <th className="px-2 py-2">Sponsor</th>
                             <th className="px-2 py-2">Cases</th>
-                            <th className="px-2 py-2">Decision %</th>
-                            <th className="px-2 py-2">Docs %</th>
-                            <th className="px-2 py-2">Execution Signal %</th>
-                            <th className="px-2 py-2">Sponsor Score</th>
+                            <th className="px-2 py-2">
+                              <MetricHeader
+                                label="Decision %"
+                                help="Average case-level decision accuracy for this sponsor: decision + approval + priority + risk + controls correctness."
+                              />
+                            </th>
+                            <th className="px-2 py-2">
+                              <MetricHeader
+                                label="Docs %"
+                                help="Share of sponsor-scoped cases where required documentation sources were correctly grounded and cited."
+                              />
+                            </th>
+                            <th className="px-2 py-2">
+                              <MetricHeader
+                                label="Execution Signal %"
+                                help="For executed cases: workflow success rate. For decision-only cases: execution eligibility signal."
+                              />
+                            </th>
+                            <th className="px-2 py-2">
+                              <MetricHeader
+                                label="Sponsor Score"
+                                help="Weighted score = 50% Decision + 30% Docs + 20% Execution Signal."
+                              />
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -991,8 +1075,8 @@ export default function HomePage() {
                   </Card>
                 );
               })}
-              {!sortedModels.length && !isLoading ? (
-                <p className="text-sm text-slate-400">Run the benchmark to populate sponsor-level breakdown.</p>
+              {!sponsorVisibleModels.length && !isLoading ? (
+                <p className="text-sm text-gray-400">Run the benchmark to populate sponsor-level breakdown.</p>
               ) : null}
             </div>
           </Disclosure>
@@ -1002,7 +1086,7 @@ export default function HomePage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold">Model Deep Dive</h2>
-              <p className="text-sm text-slate-300">Pick one model and inspect all scenario-level tasks without page scrolling.</p>
+              <p className="text-sm text-gray-300">Pick one model and inspect all scenario-level tasks without page scrolling.</p>
             </div>
             <Badge className="border-white/20 bg-white/10 text-white">1-click model navigation</Badge>
           </div>
@@ -1012,11 +1096,14 @@ export default function HomePage() {
               <button
                 key={row.model}
                 type="button"
-                onClick={() => setActiveModel(row.model)}
+                onClick={() => {
+                  setActiveModel(row.model);
+                  setSponsorShowAllModels(false);
+                }}
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   activeModel === row.model
                     ? "border-[#41d8b6] bg-[#41d8b6]/15 text-[#a6f5e3]"
-                    : "border-white/20 bg-white/5 text-slate-200 hover:border-[#41d8b6]/40 hover:bg-[#41d8b6]/10"
+                    : "border-white/20 bg-white/5 text-gray-200 hover:border-[#41d8b6]/40 hover:bg-[#41d8b6]/10"
                 }`}
               >
                 {row.model} ({paramsLabel(row.paramsBillions)})
@@ -1026,25 +1113,25 @@ export default function HomePage() {
 
           <div className="grid gap-3 md:grid-cols-4">
             <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Overall</p>
+              <p className="text-xs uppercase tracking-wide text-gray-400">Overall</p>
               <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.overallScore)}`}>
                 {metricLabel(activeModelRow?.overallScore)}
               </p>
             </Card>
             <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Decision Accuracy</p>
+              <p className="text-xs uppercase tracking-wide text-gray-400">Decision Accuracy</p>
               <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.decisionAccuracyPct)}`}>
                 {metricLabel(activeModelRow?.decisionAccuracyPct, "%")}
               </p>
             </Card>
             <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Workflow Success</p>
+              <p className="text-xs uppercase tracking-wide text-gray-400">Workflow Success</p>
               <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.workflowSuccessRatePct)}`}>
                 {metricLabel(activeModelRow?.workflowSuccessRatePct, "%")}
               </p>
             </Card>
             <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Avg Latency</p>
+              <p className="text-xs uppercase tracking-wide text-gray-400">Avg Latency</p>
               <p className="text-2xl font-semibold">{metricLabel(activeModelRow?.avgTotalLatencyMs, " ms")}</p>
             </Card>
           </div>
@@ -1052,14 +1139,34 @@ export default function HomePage() {
           <Disclosure title="Selected Model Sponsor View" subtitle="How this model performs by sponsor track" defaultOpen>
             <div className="overflow-x-auto">
               <table className="data-table min-w-full text-left text-sm">
-                <thead className="text-slate-300">
+                <thead className="text-gray-300">
                   <tr>
                     <th className="px-2 py-2">Sponsor</th>
                     <th className="px-2 py-2">Cases</th>
-                    <th className="px-2 py-2">Decision %</th>
-                    <th className="px-2 py-2">Docs %</th>
-                    <th className="px-2 py-2">Execution Signal %</th>
-                    <th className="px-2 py-2">Sponsor Score</th>
+                    <th className="px-2 py-2">
+                      <MetricHeader
+                        label="Decision %"
+                        help="Average case-level decision accuracy for this sponsor: decision + approval + priority + risk + controls correctness."
+                      />
+                    </th>
+                    <th className="px-2 py-2">
+                      <MetricHeader
+                        label="Docs %"
+                        help="Share of sponsor-scoped cases where required documentation sources were correctly grounded and cited."
+                      />
+                    </th>
+                    <th className="px-2 py-2">
+                      <MetricHeader
+                        label="Execution Signal %"
+                        help="For executed cases: workflow success rate. For decision-only cases: execution eligibility signal."
+                      />
+                    </th>
+                    <th className="px-2 py-2">
+                      <MetricHeader
+                        label="Sponsor Score"
+                        help="Weighted score = 50% Decision + 30% Docs + 20% Execution Signal."
+                      />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1075,7 +1182,7 @@ export default function HomePage() {
                   ))}
                   {!activeModelSponsorRows.length ? (
                     <tr>
-                      <td className="px-2 py-3 text-slate-400" colSpan={6}>
+                      <td className="px-2 py-3 text-gray-400" colSpan={6}>
                         No sponsor breakdown for selected model yet.
                       </td>
                     </tr>
@@ -1114,16 +1221,16 @@ export default function HomePage() {
                             task.passed ? "border-emerald-300/25 bg-emerald-300/10" : "border-rose-300/25 bg-rose-300/10"
                           }`}
                         >
-                          <p className="flex items-center gap-2 font-medium text-slate-100">
+                          <p className="flex items-center gap-2 font-medium text-gray-100">
                             {task.passed ? <CheckCircle2 size={14} className="text-emerald-200" /> : <XCircle size={14} className="text-rose-200" />}
                             {task.label}: {passLabel(task.passed)}
                           </p>
-                          <p className="mt-1 text-xs text-slate-100/90">{task.detail}</p>
+                          <p className="mt-1 text-xs text-gray-100/90">{task.detail}</p>
                         </div>
                       ))}
                     </div>
 
-                    <div className="mt-3 space-y-1 text-xs text-slate-400">
+                    <div className="mt-3 space-y-1 text-xs text-gray-400">
                       <p>Model reason: {row.llm.reason || "no reason text"}</p>
                       <p>Citation IDs: {joinList(row.llm.citations ?? [])}</p>
                       <p>Raw output preview: {row.llm.rawOutputPreview || "n/a"}</p>
@@ -1132,7 +1239,7 @@ export default function HomePage() {
                 );
               })}
               {!activeModelCaseRows.length && !isLoading ? (
-                <p className="text-sm text-slate-400">Run the benchmark to generate model-level task audit rows.</p>
+                <p className="text-sm text-gray-400">Run the benchmark to generate model-level task audit rows.</p>
               ) : null}
             </div>
           </Disclosure>
@@ -1163,14 +1270,14 @@ export default function HomePage() {
 
               <Card className="bg-soft/55 p-4">
                 <p className="mb-2 text-sm font-semibold">Environment snippet</p>
-                <pre className="overflow-auto rounded-lg bg-black/25 p-3 text-[11px] leading-5 text-slate-100">{envSnippet}</pre>
+                <pre className="overflow-auto rounded-lg bg-black/25 p-3 text-[11px] leading-5 text-gray-100">{envSnippet}</pre>
               </Card>
             </div>
           </Disclosure>
 
           {runTechnicalLog ? (
             <Disclosure title="Technical Logs" subtitle="Raw run output for debugging">
-              <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-soft/60 p-3 text-[11px] leading-4 text-slate-200">
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-soft/60 p-3 text-[11px] leading-4 text-gray-200">
                 {runTechnicalLog}
               </pre>
             </Disclosure>
