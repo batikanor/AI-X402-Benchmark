@@ -32,6 +32,27 @@ LLM_IDEMPOTENCY_CACHE: dict[str, dict[str, Any]] = {}
 IDEMPOTENCY_TTL_SECONDS = 15 * 60
 
 
+def _load_dotenv() -> None:
+    env_path = PROJECT_ROOT / ".env"
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        os.environ.setdefault(key, value.strip())
+
+
+_load_dotenv()
+
+
 def _timeout_seconds() -> int:
     raw = os.getenv("BENCH_RUN_TIMEOUT_SECONDS", "300")
     try:
