@@ -56,6 +56,19 @@ function modelRankScore(avgCoveragePct: number, successRatePct: number, avgLaten
   return avgCoveragePct * 0.5 + successRatePct * 0.4 + latencyComponent * 0.1;
 }
 
+function scenarioFailureReason(notes: string[]): string {
+  if (!notes.length) {
+    return "No failure note";
+  }
+  return notes[0];
+}
+
+type WorkflowMissingItem = {
+  integration: string;
+  required: string;
+  reason: string;
+};
+
 export default function HomePage() {
   const { data, error, isLoading, mutate } = useSWR("dashboard", fetchDashboard, { refreshInterval: 15000 });
   const {
@@ -64,10 +77,12 @@ export default function HomePage() {
     isLoading: llmLoading,
     mutate: mutateLlm,
   } = useSWR("llm-dashboard", fetchLlmDashboard, { refreshInterval: 15000 });
+
   const [running, setRunning] = useState(false);
   const [strict, setStrict] = useState(false);
   const [runSummary, setRunSummary] = useState<string>("");
   const [runTechnicalLog, setRunTechnicalLog] = useState<string>("");
+
   const [llmRunning, setLlmRunning] = useState(false);
   const [llmRunsPerTask, setLlmRunsPerTask] = useState(1);
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
@@ -77,6 +92,7 @@ export default function HomePage() {
   const latest = data?.latest;
   const project = data?.project;
   const benchmarkDefinition = data?.benchmarkDefinition;
+  const workflowStatus = benchmarkDefinition?.workflow.integrationStatus;
 
   useEffect(() => {
     if (!llmData?.availableModels.length) {
@@ -94,13 +110,6 @@ export default function HomePage() {
     });
   }, [llmData]);
 
-  const topScenario = useMemo(() => {
-    if (!data?.scenarios.length) {
-      return undefined;
-    }
-    return [...data.scenarios].sort((a, b) => b.durationMs - a.durationMs)[0];
-  }, [data?.scenarios]);
-
   const llmRows = useMemo(() => {
     if (!llmData?.models.length) {
       return [];
@@ -117,6 +126,84 @@ export default function HomePage() {
   }, [llmData?.models]);
 
   const llmLeader = llmRows[0];
+
+  const workflowMissing: WorkflowMissingItem[] = useMemo(() => {
+    if (!workflowStatus) {
+      return [];
+    }
+
+    const missing: WorkflowMissingItem[] = [];
+
+    if (!workflowStatus.hedera.configured) {
+      missing.push({
+        integration: "Hedera",
+        required:
+          workflowStatus.hedera.mode === "sdk"
+            ? "HEDERA_OPERATOR_ID + HEDERA_OPERATOR_KEY"
+            : "HEDERA_RELAY_URL",
+        reason: workflowStatus.hedera.reason,
+      });
+    }
+
+    if (!workflowStatus.chainlink.configured) {
+      missing.push({
+        integration: "Chainlink",
+        required: workflowStatus.chainlink.mode === "cli" ? "CHAINLINK_MODE=cli" : "CHAINLINK_WEBHOOK_URL",
+        reason: workflowStatus.chainlink.reason,
+      });
+    }
+
+    if (!workflowStatus.ledger.configured) {
+      missing.push({
+        integration: "Ledger",
+        required: workflowStatus.ledger.mode === "ledger_hw" ? "LEDGER_MODE=ledger_hw" : "LEDGER_APPROVER_URL",
+        reason: workflowStatus.ledger.reason,
+      });
+    }
+
+    if (!workflowStatus.serviceProbe.configured) {
+      missing.push({
+        integration: "Service Probe",
+        required: "SERVICE_PROBE_URL",
+        reason: workflowStatus.serviceProbe.reason,
+      });
+    }
+
+    return missing;
+  }, [workflowStatus]);
+
+  const workflowEnvSnippet = useMemo(() => {
+    const lines: string[] = [];
+    for (const item of workflowMissing) {
+      switch (item.required) {
+        case "HEDERA_OPERATOR_ID + HEDERA_OPERATOR_KEY":
+          lines.push("HEDERA_OPERATOR_ID=0.0.xxxxx");
+          lines.push("HEDERA_OPERATOR_KEY=302e0201...");
+          break;
+        case "HEDERA_RELAY_URL":
+          lines.push("HEDERA_RELAY_URL=https://your-hedera-relay.example");
+          break;
+        case "CHAINLINK_MODE=cli":
+          lines.push("CHAINLINK_MODE=cli");
+          break;
+        case "CHAINLINK_WEBHOOK_URL":
+          lines.push("CHAINLINK_WEBHOOK_URL=https://your-chainlink-webhook.example");
+          break;
+        case "LEDGER_MODE=ledger_hw":
+          lines.push("LEDGER_MODE=ledger_hw");
+          break;
+        case "LEDGER_APPROVER_URL":
+          lines.push("LEDGER_APPROVER_URL=https://your-ledger-approver.example");
+          break;
+        case "SERVICE_PROBE_URL":
+          lines.push("SERVICE_PROBE_URL=https://your-service-probe.example/health");
+          break;
+        default:
+          lines.push(`${item.required}=...`);
+      }
+    }
+    return lines.length ? lines.join("\n") : "# Workflow integrations are configured";
+  }, [workflowMissing]);
 
   function toggleModelSelection(model: string) {
     setSelectedModels((previous) => {
@@ -141,17 +228,17 @@ export default function HomePage() {
       if (result.ok) {
         if (latestAfterRun) {
           setRunSummary(
-            `Run completed. Score ${metricLabel(latestAfterRun.overallScore)}, success ${latestAfterRun.successful}/${latestAfterRun.totalScenarios}, p95 ${metricLabel(latestAfterRun.p95TotalMs, " ms")}, run ID ${latestAfterRun.runId}.`,
+            `Workflow run completed. Score ${metricLabel(latestAfterRun.overallScore)}, success ${latestAfterRun.successful}/${latestAfterRun.totalScenarios}, p95 ${metricLabel(latestAfterRun.p95TotalMs, " ms")}, run ID ${latestAfterRun.runId}.`,
           );
         } else {
-          setRunSummary("Run completed. Dashboard is refreshing with latest metrics.");
+          setRunSummary("Workflow run completed. Dashboard is refreshing with latest metrics.");
         }
       } else {
         setRunSummary(summarizeFailure(result.returnCode, result.stderr, result.stdout));
       }
     } catch (runError) {
       const message = runError instanceof Error ? runError.message : String(runError);
-      setRunSummary(`Run failed: ${message}`);
+      setRunSummary(`Workflow run failed: ${message}`);
       setRunTechnicalLog(compactLog(message));
     } finally {
       setRunning(false);
@@ -206,56 +293,28 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <section className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <Badge>Control Room</Badge>
-          <h1 className="text-3xl font-semibold tracking-tight">{project?.name ?? "x402Bench Agentic Payments"}</h1>
-          <p className="max-w-2xl text-sm text-slate-300">
-            {project?.tagline ?? "Benchmarking AI-agent payment reliability across orchestration, policy, and settlement rails."}
-          </p>
-          <div className="flex gap-2 pt-1">
-            {(project?.sponsors ?? ["Hedera", "Chainlink", "Ledger"]).map((sponsor) => (
-              <Badge key={sponsor} className="border-white/20 bg-white/5 text-white">
-                {sponsor}
-              </Badge>
-            ))}
-          </div>
+    <main className="mx-auto max-w-7xl px-6 py-10">
+      <section className="mb-6 space-y-2">
+        <Badge>Control Room</Badge>
+        <h1 className="text-3xl font-semibold tracking-tight">{project?.name ?? "x402Bench Agentic Payments"}</h1>
+        <p className="max-w-3xl text-sm text-slate-300">
+          Two clearly separated benchmark tracks: Workflow reliability benchmarking for sponsor integrations, and local LLM quality/latency benchmarking for agent policy reasoning.
+        </p>
+        <div className="flex flex-wrap gap-2 pt-1">
+          {(project?.sponsors ?? ["Hedera", "Chainlink", "Ledger"]).map((sponsor) => (
+            <Badge key={sponsor} className="border-white/20 bg-white/5 text-white">
+              {sponsor}
+            </Badge>
+          ))}
         </div>
-        <Card className="w-full max-w-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-300">Strict Mode</span>
-            <button
-              type="button"
-              onClick={() => setStrict((previous) => !previous)}
-              className={`h-6 w-11 rounded-full transition ${strict ? "bg-accent" : "bg-soft"}`}
-            >
-              <span
-                className={`block h-5 w-5 rounded-full bg-white transition ${strict ? "translate-x-5" : "translate-x-0.5"}`}
-              />
-            </button>
-          </div>
-          <Button onClick={handleRun} disabled={running} className="w-full gap-2">
-            <RefreshCw size={16} className={running ? "animate-spin" : ""} />
-            {running ? "Running benchmark..." : "Run Benchmark"}
-          </Button>
-          <p className="text-xs text-slate-300">{runSummary || "Run status will appear here."}</p>
-          {runTechnicalLog ? (
-            <details className="text-xs text-slate-400">
-              <summary className="cursor-pointer">Technical logs</summary>
-              <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-soft/60 p-2 text-[11px] leading-4">
-                {runTechnicalLog}
-              </pre>
-            </details>
-          ) : null}
-        </Card>
       </section>
 
       {error ? (
         <Card className="mb-6 border-red-400/50">
-          <p className="text-sm text-red-200">Failed to load dashboard: {error instanceof Error ? error.message : "Unknown error"}</p>
+          <p className="text-sm text-red-200">Failed to load workflow dashboard: {error instanceof Error ? error.message : "Unknown error"}</p>
         </Card>
       ) : null}
+
       {llmError ? (
         <Card className="mb-6 border-red-400/50">
           <p className="text-sm text-red-200">
@@ -264,161 +323,244 @@ export default function HomePage() {
         </Card>
       ) : null}
 
-      <section className="mb-6 grid gap-4 md:grid-cols-2">
-        <Card className="space-y-3">
-          <h2 className="text-lg font-semibold">What This Benchmarks (Workflow)</h2>
-          <p className="text-sm text-slate-300">
-            {benchmarkDefinition?.workflow.whatIsBenchmarked ??
-              "Policy gate, orchestration, settlement, and service-probe reliability for payment scenarios."}
-          </p>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <Badge className="border-white/20 bg-white/5 text-white">
-              Mocked: {benchmarkDefinition?.workflow.mocked === false ? "No" : "Unknown"}
-            </Badge>
-            <Badge className="border-white/20 bg-white/5 text-white">
-              Scenarios: {benchmarkDefinition?.workflow.scenarioCount ?? "-"}
-            </Badge>
-            <Badge className="border-white/20 bg-white/5 text-white">
-              Integrations ready: {benchmarkDefinition?.workflow.integrationStatus?.isFullyConfigured ? "Yes" : "Partial"}
-            </Badge>
-          </div>
-          <p className="text-xs text-slate-400">{benchmarkDefinition?.workflow.statusNote}</p>
-        </Card>
-
-        <Card className="space-y-3">
-          <h2 className="text-lg font-semibold">What This Benchmarks (LLM)</h2>
-          <p className="text-sm text-slate-300">
-            {benchmarkDefinition?.llm.whatIsBenchmarked ??
-              "Decision quality and latency across policy and triage prompts from llm_bench/suite.json."}
-          </p>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <Badge className="border-white/20 bg-white/5 text-white">Runtime: {llmData?.track.runtime ?? "local_ollama"}</Badge>
-            <Badge className="border-white/20 bg-white/5 text-white">
-              Mocked: {benchmarkDefinition?.llm.mocked === false || llmData?.track.mocked === false ? "No" : "Unknown"}
-            </Badge>
-            <Badge className="border-white/20 bg-white/5 text-white">Tasks: {llmData?.track.tasks.length ?? 0}</Badge>
-          </div>
-          <p className="text-xs text-slate-400">
-            Suite: {llmData?.track.suiteName ?? "x402Bench Agentic Payments LLM Eval"} | Path:{" "}
-            <code>{llmData?.track.suitePath ?? "llm_bench/suite.json"}</code>
-          </p>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="space-y-2">
-          <div className="flex items-center gap-2 text-slate-300">
-            <Gauge size={16} /> Overall Score
-          </div>
-          <p className="text-3xl font-semibold">{latest ? metricLabel(latest.overallScore) : "-"}</p>
-          <p className="text-xs text-slate-400">Run ID: {latest?.runId ?? "No run yet"}</p>
-        </Card>
-        <Card className="space-y-2">
-          <div className="flex items-center gap-2 text-slate-300">
-            <ShieldCheck size={16} /> Success Rate
-          </div>
-          <p className="text-3xl font-semibold">{latest ? metricLabel(latest.successRate, "%") : "-"}</p>
-          <p className="text-xs text-slate-400">
-            {latest ? `${latest.successful}/${latest.totalScenarios} scenarios passed` : "Run benchmark to populate"}
-          </p>
-        </Card>
-        <Card className="space-y-2">
-          <div className="flex items-center gap-2 text-slate-300">
-            <Timer size={16} /> P95 Total Latency
-          </div>
-          <p className="text-3xl font-semibold">{latest ? metricLabel(latest.p95TotalMs, " ms") : "-"}</p>
-          <p className="text-xs text-slate-400">End-to-end latency across policy, orchestration, and settlement.</p>
-        </Card>
-        <Card className="space-y-2">
-          <div className="flex items-center gap-2 text-slate-300">
-            <AlertTriangle size={16} /> Failure Rate
-          </div>
-          <p className="text-3xl font-semibold">{latest ? metricLabel(latest.failureRate, "%") : "-"}</p>
-          <p className="text-xs text-slate-400">Retries: {latest?.retries ?? 0}</p>
-        </Card>
-      </section>
-
-      <section className="mt-6 grid gap-4 lg:grid-cols-2">
-        <Card>
-          <h2 className="mb-3 text-lg font-semibold">Score Breakdown</h2>
-          <div className="space-y-3 text-sm text-slate-200">
-            <div className="flex items-center justify-between rounded-lg bg-soft/70 p-3"><span>Reliability</span><span>{latest ? metricLabel(latest.reliabilityScore) : "-"}</span></div>
-            <div className="flex items-center justify-between rounded-lg bg-soft/70 p-3"><span>Latency</span><span>{latest ? metricLabel(latest.latencyScore) : "-"}</span></div>
-            <div className="flex items-center justify-between rounded-lg bg-soft/70 p-3"><span>Safety</span><span>{latest ? metricLabel(latest.safetyScore) : "-"}</span></div>
-            <div className="flex items-center justify-between rounded-lg bg-soft/70 p-3"><span>Resilience</span><span>{latest ? metricLabel(latest.resilienceScore) : "-"}</span></div>
-          </div>
-        </Card>
-        <Card>
-          <h2 className="mb-3 text-lg font-semibold">Scenario Pressure Point</h2>
-          {isLoading ? <p className="text-sm text-slate-300">Loading scenarios...</p> : null}
-          {!isLoading && topScenario ? (
-            <div className="space-y-3 text-sm">
-              <div className="rounded-lg bg-soft/70 p-3">
-                <p className="font-semibold">{topScenario.name}</p>
-                <p className="text-slate-300">Status: {topScenario.status}</p>
-                <p className="text-slate-300">Duration: {metricLabel(topScenario.durationMs, " ms")}</p>
+      <section className="space-y-6">
+        <Card className="space-y-6 border-cyan-400/20 bg-panel/95">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <Badge className="border-cyan-300/40 bg-cyan-400/10 text-cyan-100">Workflow Benchmark</Badge>
+              <h2 className="text-2xl font-semibold">Agentic Payments Workflow Benchmark</h2>
+              <p className="max-w-3xl text-sm text-slate-300">
+                {benchmarkDefinition?.workflow.whatIsBenchmarked ??
+                  "Policy gate, orchestration, settlement, and service probe reliability for payment scenarios."}
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge className="border-white/20 bg-white/5 text-white">
+                  Mocked: {benchmarkDefinition?.workflow.mocked === false ? "No" : "Unknown"}
+                </Badge>
+                <Badge className="border-white/20 bg-white/5 text-white">
+                  Scenarios: {benchmarkDefinition?.workflow.scenarioCount ?? "-"}
+                </Badge>
+                <Badge className="border-white/20 bg-white/5 text-white">
+                  Integrations ready: {workflowStatus?.isFullyConfigured ? "Yes" : "Partial"}
+                </Badge>
               </div>
-              <div>
-                <p className="mb-1 font-medium">Notes</p>
-                <ul className="list-disc space-y-1 pl-5 text-slate-300">
-                  {(topScenario.notes.length ? topScenario.notes : ["No blocking notes for this scenario."]).map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
+              <p className="text-xs text-slate-400">{benchmarkDefinition?.workflow.statusNote}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-soft/60 px-4 py-3 text-sm">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Workflow Run ID</p>
+              <p className="font-medium text-slate-100">{latest?.runId ?? "No run yet"}</p>
+            </div>
+          </div>
+
+          {workflowMissing.length > 0 ? (
+            <div className="space-y-3 rounded-xl border border-amber-300/30 bg-amber-400/10 p-4">
+              <div className="flex items-center gap-2 text-amber-100">
+                <AlertTriangle size={16} />
+                <p className="font-semibold">Why workflow scenarios are failing right now</p>
+              </div>
+              <p className="text-sm text-amber-50/90">
+                The run is non-mocked, but required sponsor/service integration endpoints or credentials are missing. The benchmark intentionally fails fast when required integration inputs are absent.
+              </p>
+              <div className="space-y-2 text-sm">
+                {workflowMissing.map((item) => (
+                  <div key={item.integration} className="rounded-lg border border-amber-200/20 bg-black/15 px-3 py-2">
+                    <p className="font-medium text-amber-50">{item.integration}</p>
+                    <p className="text-amber-50/90">Required input: {item.required}</p>
+                    <p className="text-amber-50/80">Reason: {item.reason}</p>
+                  </div>
+                ))}
               </div>
             </div>
           ) : null}
-          {!isLoading && !topScenario ? <p className="text-sm text-slate-300">Run benchmark to reveal scenario diagnostics.</p> : null}
-        </Card>
-      </section>
 
-      <section className="mt-6">
-        <Card>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-            <Activity size={16} /> Scenario Ledger
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-slate-300">
-                <tr>
-                  <th className="px-2 py-2">Scenario</th>
-                  <th className="px-2 py-2">Status</th>
-                  <th className="px-2 py-2">Duration (ms)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.scenarios ?? []).map((scenario) => (
-                  <tr key={scenario.id} className="border-t border-white/10">
-                    <td className="px-2 py-2">{scenario.name}</td>
-                    <td className="px-2 py-2 uppercase">{scenario.status}</td>
-                    <td className="px-2 py-2">{metricLabel(scenario.durationMs)}</td>
-                  </tr>
-                ))}
-                {(!data?.scenarios || data.scenarios.length === 0) && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="bg-soft/50">
+              <p className="mb-2 text-sm font-semibold">What you need to enter</p>
+              <p className="mb-2 text-xs text-slate-300">
+                Add these to backend runtime env for workflow benchmark execution.
+              </p>
+              <pre className="overflow-auto rounded-lg bg-black/25 p-3 text-[11px] leading-5 text-slate-100">{workflowEnvSnippet}</pre>
+              <p className="mt-2 text-xs text-slate-400">
+                Recommended location: <code>backend/.env</code> or your shell environment before starting the API.
+              </p>
+            </Card>
+
+            <Card className="bg-soft/50">
+              <p className="mb-2 text-sm font-semibold">Alternative: config file path</p>
+              <p className="text-xs text-slate-300">
+                You can also define integration URLs under:
+              </p>
+              <p className="mt-2 text-xs text-slate-100">
+                <code>/Users/batikanorpava/Documents/other_development/04_04_2026_ethcannes2026/projects/x402bench-agentic-payments/config/benchmark.config.json</code>
+              </p>
+              <p className="mt-3 text-xs text-slate-400">
+                After updating env/config, rerun the workflow benchmark from this widget.
+              </p>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
+            <Card className="space-y-3 bg-soft/50">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-300">Strict Mode</span>
+                <button
+                  type="button"
+                  onClick={() => setStrict((previous) => !previous)}
+                  className={`h-6 w-11 rounded-full transition ${strict ? "bg-accent" : "bg-soft"}`}
+                >
+                  <span className={`block h-5 w-5 rounded-full bg-white transition ${strict ? "translate-x-5" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+              <Button onClick={handleRun} disabled={running} className="w-full gap-2">
+                <RefreshCw size={16} className={running ? "animate-spin" : ""} />
+                {running ? "Running workflow benchmark..." : "Run Workflow Benchmark"}
+              </Button>
+              <p className="text-xs text-slate-300">{runSummary || "Workflow run status will appear here."}</p>
+              {runTechnicalLog ? (
+                <details className="text-xs text-slate-400">
+                  <summary className="cursor-pointer">Technical logs</summary>
+                  <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-soft/60 p-2 text-[11px] leading-4">
+                    {runTechnicalLog}
+                  </pre>
+                </details>
+              ) : null}
+            </Card>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Card className="space-y-2 bg-soft/50">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <Gauge size={16} /> Workflow Score
+                </div>
+                <p className="text-3xl font-semibold">{latest ? metricLabel(latest.overallScore) : "-"}</p>
+              </Card>
+              <Card className="space-y-2 bg-soft/50">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <ShieldCheck size={16} /> Workflow Success
+                </div>
+                <p className="text-3xl font-semibold">{latest ? metricLabel(latest.successRate, "%") : "-"}</p>
+                <p className="text-xs text-slate-400">
+                  {latest ? `${latest.successful}/${latest.totalScenarios} scenarios passed` : "Run workflow benchmark to populate"}
+                </p>
+              </Card>
+              <Card className="space-y-2 bg-soft/50">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <Timer size={16} /> Workflow P95
+                </div>
+                <p className="text-3xl font-semibold">{latest ? metricLabel(latest.p95TotalMs, " ms") : "-"}</p>
+              </Card>
+              <Card className="space-y-2 bg-soft/50">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <AlertTriangle size={16} /> Workflow Fail Rate
+                </div>
+                <p className="text-3xl font-semibold">{latest ? metricLabel(latest.failureRate, "%") : "-"}</p>
+                <p className="text-xs text-slate-400">Retries: {latest?.retries ?? 0}</p>
+              </Card>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="bg-soft/50">
+              <h3 className="mb-3 text-lg font-semibold">Workflow Score Breakdown</h3>
+              <div className="space-y-3 text-sm text-slate-200">
+                <div className="flex items-center justify-between rounded-lg bg-soft/70 p-3"><span>Reliability</span><span>{latest ? metricLabel(latest.reliabilityScore) : "-"}</span></div>
+                <div className="flex items-center justify-between rounded-lg bg-soft/70 p-3"><span>Latency</span><span>{latest ? metricLabel(latest.latencyScore) : "-"}</span></div>
+                <div className="flex items-center justify-between rounded-lg bg-soft/70 p-3"><span>Safety</span><span>{latest ? metricLabel(latest.safetyScore) : "-"}</span></div>
+                <div className="flex items-center justify-between rounded-lg bg-soft/70 p-3"><span>Resilience</span><span>{latest ? metricLabel(latest.resilienceScore) : "-"}</span></div>
+              </div>
+            </Card>
+
+            <Card className="bg-soft/50">
+              <h3 className="mb-3 text-lg font-semibold">Scenario Pressure Point</h3>
+              {isLoading ? <p className="text-sm text-slate-300">Loading scenarios...</p> : null}
+              {!isLoading && data?.scenarios.length ? (
+                <div className="space-y-3 text-sm">
+                  {(() => {
+                    const topScenario = [...data.scenarios].sort((a, b) => b.durationMs - a.durationMs)[0];
+                    return (
+                      <>
+                        <div className="rounded-lg bg-soft/70 p-3">
+                          <p className="font-semibold">{topScenario.name}</p>
+                          <p className="text-slate-300">Status: {topScenario.status}</p>
+                          <p className="text-slate-300">Duration: {metricLabel(topScenario.durationMs, " ms")}</p>
+                        </div>
+                        <div>
+                          <p className="mb-1 font-medium">Failure explanation</p>
+                          <p className="rounded-lg bg-soft/70 p-3 text-slate-300">{scenarioFailureReason(topScenario.notes)}</p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : null}
+              {!isLoading && (!data?.scenarios || data.scenarios.length === 0) ? (
+                <p className="text-sm text-slate-300">Run workflow benchmark to reveal scenario diagnostics.</p>
+              ) : null}
+            </Card>
+          </div>
+
+          <Card className="bg-soft/50">
+            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+              <Activity size={16} /> Workflow Scenario Ledger
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="text-slate-300">
                   <tr>
-                    <td className="px-2 py-3 text-slate-400" colSpan={3}>
-                      No scenarios recorded yet.
-                    </td>
+                    <th className="px-2 py-2">Scenario</th>
+                    <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2">Duration (ms)</th>
+                    <th className="px-2 py-2">Failure reason</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {(data?.scenarios ?? []).map((scenario) => (
+                    <tr key={scenario.id} className="border-t border-white/10 align-top">
+                      <td className="px-2 py-2">{scenario.name}</td>
+                      <td className="px-2 py-2 uppercase">{scenario.status}</td>
+                      <td className="px-2 py-2">{metricLabel(scenario.durationMs)}</td>
+                      <td className="px-2 py-2 text-slate-300">{scenarioFailureReason(scenario.notes)}</td>
+                    </tr>
+                  ))}
+                  {(!data?.scenarios || data.scenarios.length === 0) && (
+                    <tr>
+                      <td className="px-2 py-3 text-slate-400" colSpan={4}>
+                        No workflow scenarios recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </Card>
-      </section>
 
-      <section className="mt-6">
-        <Card className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">LLM Model Comparison (Real Ollama Runs)</h2>
-            <Badge className="border-white/20 bg-white/5 text-white">
-              Latest run: {llmData?.latest?.runId ?? "No run yet"}
-            </Badge>
+        <Card className="space-y-6 border-fuchsia-400/20 bg-panel/95">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <Badge className="border-fuchsia-300/40 bg-fuchsia-400/10 text-fuchsia-100">LLM Benchmark</Badge>
+              <h2 className="text-2xl font-semibold">Local Ollama Model Comparison</h2>
+              <p className="max-w-3xl text-sm text-slate-300">
+                {benchmarkDefinition?.llm.whatIsBenchmarked ??
+                  "Decision quality and latency across policy/triage prompts from llm_bench/suite.json."}
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge className="border-white/20 bg-white/5 text-white">Runtime: {llmData?.track.runtime ?? "local_ollama"}</Badge>
+                <Badge className="border-white/20 bg-white/5 text-white">
+                  Mocked: {benchmarkDefinition?.llm.mocked === false || llmData?.track.mocked === false ? "No" : "Unknown"}
+                </Badge>
+                <Badge className="border-white/20 bg-white/5 text-white">Tasks: {llmData?.track.tasks.length ?? 0}</Badge>
+              </div>
+              <p className="text-xs text-slate-400">
+                Suite: {llmData?.track.suiteName ?? "x402Bench Agentic Payments LLM Eval"} | Path:{" "}
+                <code>{llmData?.track.suitePath ?? "llm_bench/suite.json"}</code>
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-soft/60 px-4 py-3 text-sm">
+              <p className="text-xs uppercase tracking-wide text-slate-400">LLM Run ID</p>
+              <p className="font-medium text-slate-100">{llmData?.latest?.runId ?? "No run yet"}</p>
+            </div>
           </div>
-          <p className="text-sm text-slate-300">
-            This run sends real prompts to your local Ollama API and compares models on coverage, success rate, and latency. No mocked
-            LLM outputs are used.
-          </p>
 
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <div className="space-y-2">
@@ -455,7 +597,7 @@ export default function HomePage() {
               ) : null}
             </div>
 
-            <div className="space-y-3">
+            <Card className="space-y-3 bg-soft/50">
               <div className="space-y-1">
                 <label htmlFor="runs-per-task" className="text-sm font-medium">
                   Runs per task
@@ -487,19 +629,19 @@ export default function HomePage() {
                   </pre>
                 </details>
               ) : null}
-            </div>
+            </Card>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="bg-soft/40">
+            <Card className="bg-soft/50">
               <p className="text-xs uppercase tracking-wide text-slate-400">Models in last run</p>
               <p className="mt-2 text-sm text-slate-100">{llmData?.latest?.models.join(", ") || "No LLM run yet."}</p>
             </Card>
-            <Card className="bg-soft/40">
+            <Card className="bg-soft/50">
               <p className="text-xs uppercase tracking-wide text-slate-400">Started</p>
               <p className="mt-2 text-sm text-slate-100">{formatDateTime(llmData?.latest?.startedAt)}</p>
             </Card>
-            <Card className="bg-soft/40">
+            <Card className="bg-soft/50">
               <p className="text-xs uppercase tracking-wide text-slate-400">Current leader</p>
               <p className="mt-2 text-sm text-slate-100">
                 {llmLeader
@@ -511,37 +653,39 @@ export default function HomePage() {
             </Card>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-slate-300">
-                <tr>
-                  <th className="px-2 py-2">Model</th>
-                  <th className="px-2 py-2">Avg Latency (ms)</th>
-                  <th className="px-2 py-2">P95 Latency (ms)</th>
-                  <th className="px-2 py-2">Coverage (%)</th>
-                  <th className="px-2 py-2">Success (%)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {llmRows.map((row) => (
-                  <tr key={row.model} className="border-t border-white/10">
-                    <td className="px-2 py-2">{row.model}</td>
-                    <td className="px-2 py-2">{metricLabel(row.avgLatencyMs)}</td>
-                    <td className="px-2 py-2">{metricLabel(row.p95LatencyMs)}</td>
-                    <td className="px-2 py-2">{metricLabel(row.avgCoveragePct)}</td>
-                    <td className="px-2 py-2">{metricLabel(row.successRatePct)}</td>
-                  </tr>
-                ))}
-                {llmRows.length === 0 && !llmLoading ? (
+          <Card className="bg-soft/50">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="text-slate-300">
                   <tr>
-                    <td className="px-2 py-3 text-slate-400" colSpan={5}>
-                      No LLM comparison results yet.
-                    </td>
+                    <th className="px-2 py-2">Model</th>
+                    <th className="px-2 py-2">Avg Latency (ms)</th>
+                    <th className="px-2 py-2">P95 Latency (ms)</th>
+                    <th className="px-2 py-2">Coverage (%)</th>
+                    <th className="px-2 py-2">Success (%)</th>
                   </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {llmRows.map((row) => (
+                    <tr key={row.model} className="border-t border-white/10">
+                      <td className="px-2 py-2">{row.model}</td>
+                      <td className="px-2 py-2">{metricLabel(row.avgLatencyMs)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.p95LatencyMs)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.avgCoveragePct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.successRatePct)}</td>
+                    </tr>
+                  ))}
+                  {llmRows.length === 0 && !llmLoading ? (
+                    <tr>
+                      <td className="px-2 py-3 text-slate-400" colSpan={5}>
+                        No LLM comparison results yet.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </Card>
       </section>
     </main>

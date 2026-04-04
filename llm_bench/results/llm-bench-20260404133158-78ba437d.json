@@ -1,0 +1,175 @@
+{
+  "meta": {
+    "runId": "llm-bench-20260404133158-78ba437d",
+    "suiteName": "x402Bench Agentic Payments LLM Eval",
+    "startedAt": "2026-04-04T13:31:58.417Z",
+    "finishedAt": "2026-04-04T13:33:05.925Z",
+    "models": [
+      "qwen3:4b-instruct",
+      "gemma4:e4b"
+    ],
+    "taskCount": 4,
+    "runsPerTask": 1,
+    "api": "http://127.0.0.1:11434/api/generate"
+  },
+  "summary": {
+    "models": [
+      {
+        "model": "qwen3:4b-instruct",
+        "avgLatencyMs": 1444.62,
+        "p95LatencyMs": 2754.6,
+        "avgCoveragePct": 100,
+        "successRatePct": 100
+      },
+      {
+        "model": "gemma4:e4b",
+        "avgLatencyMs": 15430.77,
+        "p95LatencyMs": 20092.42,
+        "avgCoveragePct": 100,
+        "successRatePct": 100
+      }
+    ]
+  },
+  "results": [
+    {
+      "model": "qwen3:4b-instruct",
+      "taskId": "policy-risk-review",
+      "taskName": "Policy risk review",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 3045.81,
+      "output": "decision: reject  \nrisk level: high  \nrequired controls: identity verification, domain validation, transaction monitoring, audit trail, multi-factor authentication  \nreason: transferring USDC to an unknown domain introduces significant fraud, security, and compliance risks without established regulatory or operational safeguards.",
+      "matchedKeywords": [
+        "decision",
+        "risk level",
+        "required controls",
+        "reason"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "qwen3:4b-instruct",
+      "taskId": "settlement-failure-triage",
+      "taskName": "Settlement failure triage",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 999.98,
+      "output": "probable root cause: Network latency or timeout in the settlement endpoint during post-policy pass processing  \nimmediate action: Retry the settlement request with a shorter timeout and increased retry intervals  \nfallback path: Route the payment to a backup settlement service or escalate to manual settlement processing",
+      "matchedKeywords": [
+        "probable root cause",
+        "immediate action",
+        "fallback path"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "qwen3:4b-instruct",
+      "taskId": "approval-scope-check",
+      "taskName": "Approval scope check",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 628.28,
+      "output": "risk level: high  \nscope issue: unauthorized token usage without proper verification  \nsafer alternative: implement a limited, time-bound approval with explicit user confirmation",
+      "matchedKeywords": [
+        "risk level",
+        "scope issue",
+        "safer alternative"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "qwen3:4b-instruct",
+      "taskId": "audit-summary",
+      "taskName": "Audit summary",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 1104.4,
+      "output": "reliability: Ensures consistent and accurate decision-making under all conditions.  \nlatency: Maintains minimal delay in processing and responding to judicial actions.  \nsafety: Protects data and systems from unauthorized access or breaches.  \nresilience: Enables continued operation during disruptions or failures.",
+      "matchedKeywords": [
+        "reliability",
+        "latency",
+        "safety",
+        "resilience"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "gemma4:e4b",
+      "taskId": "policy-risk-review",
+      "taskName": "Policy risk review",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 21003.77,
+      "output": "decision: Reject/Halt\nrisk level: High\nrequired controls: Mandatory multi-level approval (MFA/Segregation of Duties); Full Know Your Customer (KYC) and Know Your Business (KYB) verification of the counterparty; Comprehensive due diligence on the destination domain/address.\nreason: The combination of a high monetary value ($35,000) and the lack of verifiable information regarding the counterparty and destination domain significantly increases the risk of fraud, phishing, or unauthorized transfer.",
+      "matchedKeywords": [
+        "decision",
+        "risk level",
+        "required controls",
+        "reason"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "gemma4:e4b",
+      "taskId": "settlement-failure-triage",
+      "taskName": "Settlement failure triage",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 14870.03,
+      "output": "probable root cause: Network latency or unavailability of the downstream payment processor/settlement bank.\nimmediate action: Query the payment gateway for the transaction status (is it pending or failed?) and attempt a single, controlled retry of the settlement process.\nfallback path: Switch to an alternative payment rail (e.g., a different card network or processor) or initiate a manual reconciliation process if the failure persists.",
+      "matchedKeywords": [
+        "probable root cause",
+        "immediate action",
+        "fallback path"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "gemma4:e4b",
+      "taskId": "approval-scope-check",
+      "taskName": "Approval scope check",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 10921.18,
+      "output": "risk level: High\nscope issue: The requested approval scope (unlimited tokens) vastly exceeds the required transaction value (5 USDC).\nsafer alternative: Only approve the minimum necessary amount (5 USDC) or check if the payment can be made without granting broad token permissions.",
+      "matchedKeywords": [
+        "risk level",
+        "scope issue",
+        "safer alternative"
+      ],
+      "coveragePct": 100
+    },
+    {
+      "model": "gemma4:e4b",
+      "taskId": "audit-summary",
+      "taskName": "Audit summary",
+      "attempt": 1,
+      "ok": true,
+      "error": null,
+      "doneReason": "stop",
+      "latencyMs": 14928.1,
+      "output": "reliability: Measures consistent, accurate judgment across diverse case types and volumes.\nlatency: Benchmarks the speed of decision-making, ensuring timely justice delivery.\nsafety: Verifies adherence to legal standards, minimizing bias and ensuring due process.\nresilience: Tests the system's ability to maintain integrity and function under extreme stress or novel legal challenges.",
+      "matchedKeywords": [
+        "reliability",
+        "latency",
+        "safety",
+        "resilience"
+      ],
+      "coveragePct": 100
+    }
+  ]
+}
