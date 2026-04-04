@@ -21,8 +21,10 @@ LLM_SUITE_PATH = PROJECT_ROOT / "llm_bench" / "suite.json"
 LLM_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_ollama_llm_benchmark.mjs"
 READINESS_RESULTS_DIR = PROJECT_ROOT / "readiness_bench" / "results"
 READINESS_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_llm_readiness_benchmark.mjs"
+READINESS_SUITE_PATH = PROJECT_ROOT / "readiness_bench" / "suite.json"
 
 MODEL_NAME_REGEX = re.compile(r"^[A-Za-z0-9._:/-]+$")
+ENV_NAME_REGEX = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 
 RUN_COND = threading.Condition()
 RUN_IN_PROGRESS = False
@@ -156,6 +158,9 @@ class LlmRunRequest(BaseModel):
 
 class ReadinessRunRequest(BaseModel):
     models: list[str] = Field(min_length=2, max_length=6)
+    runtime: str = Field(default="ollama")
+    apiBaseUrl: str | None = Field(default=None, max_length=1024)
+    apiKeyEnv: str = Field(default="OPENAI_API_KEY", max_length=64)
     runsPerScenario: int = Field(default=1, ge=1, le=3)
     maxTokens: int = Field(default=512, ge=64, le=4096)
     temperature: float = Field(default=0.1, ge=0, le=1)
@@ -242,6 +247,15 @@ def _load_llm_suite() -> dict[str, Any]:
         return {}
     try:
         return _load_json(LLM_SUITE_PATH)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _load_readiness_suite() -> dict[str, Any]:
+    if not READINESS_SUITE_PATH.exists():
+        return {}
+    try:
+        return _load_json(READINESS_SUITE_PATH)
     except (json.JSONDecodeError, OSError):
         return {}
 
@@ -404,7 +418,7 @@ def _recommended_models(models: list[str]) -> list[str]:
     ordered = sorted(models, key=lambda item: (score(item), item), reverse=True)
     filtered = [item for item in ordered if score(item) > -100]
     base = filtered if filtered else ordered
-    return base[:3]
+    return base[:4]
 
 
 def _build_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:
@@ -518,57 +532,63 @@ def _build_llm_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _readiness_definition() -> dict[str, Any]:
+def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any]:
     config = _load_workflow_config()
-    suite = config.get("suite", {}) if isinstance(config.get("suite"), dict) else {}
-    scenarios = config.get("scenarios", []) if isinstance(config.get("scenarios"), list) else []
+    readiness_suite = _load_readiness_suite()
+    cases = readiness_suite.get("cases", []) if isinstance(readiness_suite.get("cases"), list) else []
+    meta = report.get("meta", {}) if isinstance(report, dict) and isinstance(report.get("meta"), dict) else {}
     integration_status = _integration_status(config)
+    runtime_used = str(meta.get("runtime") or "ollama")
+
     return {
         "name": "LLM readiness for payment workflows",
         "whatIsBenchmarked": (
-            "Whether LLMs make correct policy and routing decisions for payment scenarios, "
-            "and whether those decisions execute successfully through Chainlink orchestration, "
-            "Hedera settlement, and Ledger policy controls."
+            "How accurately a model makes payment-policy decisions (allow/block, approval gate, risk level, and required controls), "
+            "plus whether eligible scenarios complete real execution across Chainlink orchestration, Hedera settlement, and Ledger checks."
         ),
         "mocked": False,
-        "suiteId": suite.get("id"),
-        "suiteName": suite.get("name"),
-        "scenarioCount": len(scenarios),
+        "suiteName": readiness_suite.get("name", "x402Bench Readiness Suite"),
+        "suiteVersion": readiness_suite.get("version", "1.0"),
+        "suitePath": str(READINESS_SUITE_PATH),
+        "scenarioCount": len(cases),
+        "runtimeUsed": runtime_used,
+        "supportedRuntimes": ["ollama", "openai_compat"],
         "integrationStatus": integration_status,
         "statusNote": (
             "Local integration fallbacks are auto-wired for API-triggered runs. "
             "Set explicit sponsor endpoints for production-realistic validation."
             if integration_status.get("isFullyConfigured")
-            else "Not all explicit integration URLs are configured. API-triggered runs will auto-wire local integration endpoints."
+            else "Not all explicit integration URLs are configured. API-triggered runs auto-wire local integration endpoints."
         ),
     }
 
 
 def _scenario_templates() -> list[dict[str, Any]]:
-    config = _load_workflow_config()
-    scenarios = config.get("scenarios", []) if isinstance(config.get("scenarios"), list) else []
-    policy = config.get("policy", {}) if isinstance(config.get("policy"), dict) else {}
-    blocked = set(policy.get("blockedCountries", []) if isinstance(policy.get("blockedCountries"), list) else [])
-    threshold = float(policy.get("highValueThresholdUsd", 0) or 0)
+    readiness_suite = _load_readiness_suite()
+    cases = readiness_suite.get("cases", []) if isinstance(readiness_suite.get("cases"), list) else []
 
     templates: list[dict[str, Any]] = []
-    for scenario in scenarios:
-        if not isinstance(scenario, dict):
+    for case in cases:
+        if not isinstance(case, dict):
             continue
+        scenario = case.get("scenario", {}) if isinstance(case.get("scenario"), dict) else {}
         payment = scenario.get("payment", {}) if isinstance(scenario.get("payment"), dict) else {}
-        workflow_input = scenario.get("workflowInput", {}) if isinstance(scenario.get("workflowInput"), dict) else {}
-        country = str(payment.get("destinationCountry", ""))
-        amount = float(payment.get("amountUsd", 0) or 0)
-        allowed = country not in blocked
-        approval_required = bool(allowed and amount >= threshold)
+        expected = case.get("expected", {}) if isinstance(case.get("expected"), dict) else {}
         templates.append(
             {
-                "id": scenario.get("id"),
-                "name": scenario.get("name"),
+                "id": str(case.get("id") or scenario.get("id") or ""),
+                "name": str(case.get("name") or scenario.get("name") or ""),
+                "executionMode": str(case.get("executionMode") or "real"),
+                "payment": {
+                    "amountUsd": float(payment.get("amountUsd", 0) or 0),
+                    "destinationCountry": str(payment.get("destinationCountry") or ""),
+                },
                 "expected": {
-                    "allow": allowed,
-                    "approvalRequired": approval_required,
-                    "priority": str(workflow_input.get("priority", "standard")),
+                    "decision": str(expected.get("decision") or ""),
+                    "approvalRequired": expected.get("approvalRequired"),
+                    "priority": str(expected.get("priority") or ""),
+                    "riskLevel": str(expected.get("riskLevel") or ""),
+                    "requiredControls": expected.get("requiredControls", []),
                 },
             }
         )
@@ -578,7 +598,7 @@ def _scenario_templates() -> list[dict[str, Any]]:
 def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:
     models = _list_ollama_models()
     recommended_models = _recommended_models(models)
-    definition = _readiness_definition()
+    definition = _readiness_definition(report)
     templates = _scenario_templates()
 
     if not report:
@@ -610,6 +630,9 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
         trimmed_results.append(
             {
                 "model": item.get("model"),
+                "caseId": item.get("caseId"),
+                "caseName": item.get("caseName"),
+                "executionMode": item.get("executionMode"),
                 "scenarioId": item.get("scenarioId"),
                 "scenarioName": item.get("scenarioName"),
                 "attempt": item.get("attempt"),
@@ -619,6 +642,8 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
                     "decision": llm.get("decision"),
                     "approvalRequired": llm.get("approvalRequired"),
                     "priority": llm.get("priority"),
+                    "riskLevel": llm.get("riskLevel"),
+                    "requiredControls": llm.get("requiredControls", []),
                     "reason": llm.get("reason"),
                     "latencyMs": llm.get("latencyMs", 0),
                     "error": llm.get("error"),
@@ -643,8 +668,11 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
             "runId": meta.get("runId"),
             "startedAt": meta.get("startedAt"),
             "finishedAt": meta.get("finishedAt"),
-            "scenarioCount": meta.get("scenarioCount", 0),
+            "scenarioCount": meta.get("scenarioCount", meta.get("caseCount", 0)),
             "runsPerScenario": meta.get("runsPerScenario", 0),
+            "runtime": meta.get("runtime", "ollama"),
+            "suiteName": meta.get("suiteName", definition.get("suiteName")),
+            "suiteVersion": meta.get("suiteVersion", definition.get("suiteVersion")),
             "models": meta.get("models", []),
             "totalEvaluations": summary.get("totalEvaluations", 0),
         },
@@ -760,7 +788,13 @@ def _extract_run_id_from_stdout(stdout: str) -> str | None:
     return str(run_id) if run_id else None
 
 
-def _validate_models_or_raise(models: list[str], available_models: list[str]) -> list[str]:
+def _validate_models_or_raise(
+    models: list[str],
+    available_models: list[str],
+    *,
+    require_available: bool = True,
+    source_label: str = "local Ollama",
+) -> list[str]:
     normalized = [item.strip() for item in models if item and item.strip()]
     unique: list[str] = []
     seen: set[str] = set()
@@ -777,10 +811,10 @@ def _validate_models_or_raise(models: list[str], available_models: list[str]) ->
         if not MODEL_NAME_REGEX.fullmatch(model):
             raise HTTPException(status_code=422, detail=f"Invalid model name: {model}")
 
-    if available_models:
+    if require_available and available_models:
         missing = [model for model in unique if model not in available_models]
         if missing:
-            raise HTTPException(status_code=422, detail=f"Models not found in local Ollama: {', '.join(missing)}")
+            raise HTTPException(status_code=422, detail=f"Models not found in {source_label}: {', '.join(missing)}")
 
     return unique
 
@@ -939,16 +973,44 @@ def run_readiness_benchmark(
         if cached is not None:
             return cached
 
+    runtime = payload.runtime.strip().lower()
+    if runtime not in {"ollama", "openai_compat"}:
+        raise HTTPException(status_code=422, detail="runtime must be one of: ollama, openai_compat")
+
+    api_key_env = payload.apiKeyEnv.strip().upper()
+    if not ENV_NAME_REGEX.fullmatch(api_key_env):
+        raise HTTPException(
+            status_code=422,
+            detail="apiKeyEnv must be a valid environment variable name (A-Z, 0-9, underscore).",
+        )
+
     available_models = _list_ollama_models()
-    models = _validate_models_or_raise(payload.models, available_models)
+    models = _validate_models_or_raise(
+        payload.models,
+        available_models,
+        require_available=runtime == "ollama",
+        source_label="local Ollama",
+    )
 
     started = time.perf_counter()
     run_state = _start_readiness_run_or_join(_readiness_join_wait_seconds())
     if run_state == "timeout":
-        raise HTTPException(
-            status_code=409,
-            detail=f"A readiness benchmark run is already in progress and did not finish within {_readiness_join_wait_seconds()} seconds.",
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        latest = _latest_readiness_report()
+        response = RunResponse(
+            ok=False,
+            returnCode=409,
+            stdout="",
+            stderr=(
+                "A readiness benchmark run is already in progress. "
+                "Please wait for the current run to finish, then refresh."
+            ),
+            runId=latest.stem if latest else None,
+            durationMs=duration_ms,
         )
+        if idempotency_key:
+            _cache_put(READINESS_IDEMPOTENCY_CACHE, idempotency_key, response)
+        return response
 
     if run_state == "joined":
         latest = _latest_readiness_report()
@@ -974,10 +1036,16 @@ def run_readiness_benchmark(
             str(READINESS_SCRIPT_PATH),
             "--config",
             str(DEFAULT_CONFIG),
+            "--suite",
+            str(READINESS_SUITE_PATH),
             "--outdir",
             str(READINESS_RESULTS_DIR),
             "--models",
             ",".join(models),
+            "--runtime",
+            runtime,
+            "--api-key-env",
+            api_key_env,
             "--runs-per-scenario",
             str(payload.runsPerScenario),
             "--max-tokens",
@@ -987,6 +1055,8 @@ def run_readiness_benchmark(
             "--integration-base-url",
             base_url,
         ]
+        if payload.apiBaseUrl and payload.apiBaseUrl.strip():
+            command.extend(["--api-base-url", payload.apiBaseUrl.strip()])
 
         try:
             process = subprocess.run(

@@ -8,7 +8,7 @@ Production-oriented benchmark suite for AI payment flows across a multi-layer tr
 
 ## Why this exists
 
-Agentic payment systems are often demoed with one happy-path transaction. Teams still lack repeatable benchmarks for:
+AI-driven payment systems are often demoed with one happy-path transaction. Teams still lack repeatable benchmarks for:
 - reliability under retries
 - p95 latency across orchestration + settlement
 - policy safety behavior
@@ -25,7 +25,9 @@ x402Bench provides one integrated readiness benchmark and scorecard.
 - JSON + Markdown benchmark artifacts
 - Pluggable integrations for Hedera, Chainlink, Ledger
 - Hardened FastAPI backend with idempotency and run locking
-- Integrated LLM readiness runner (decision correctness + real workflow execution in one score)
+- Integrated LLM readiness runner (policy quality + real workflow execution in one score)
+- Runtime abstraction: local Ollama or OpenAI-compatible APIs (including Hugging Face Router)
+- Hard readiness suite with adversarial/policy-edge cases to avoid inflated 100% scores
 
 ## Standards and Best-Practice Alignment
 
@@ -108,7 +110,8 @@ npm run dev
 - `npm run api:dev`: run FastAPI backend on port 8000
 - `npm run ui:dev`: run Next.js frontend on port 3000
 - `npm run llm:bench`: run real Ollama LLM benchmark on `gemma4:e4b`
-- `npm run readiness:bench`: run integrated LLM readiness benchmark across 2+ models
+- `npm run readiness:bench`: run hard readiness benchmark across 4 local models
+- `npm run readiness:bench:hf`: run the same benchmark against OpenAI-compatible hosted models (HF Router example)
 
 ## Integrated readiness benchmark
 
@@ -116,6 +119,13 @@ Use local Ollama models and real workflow integrations in one run:
 
 ```bash
 npm run readiness:bench
+```
+
+Use OpenAI-compatible hosted models (Hugging Face Router, OpenRouter, or self-hosted compatible endpoint):
+
+```bash
+export HF_TOKEN=hf_xxx
+npm run readiness:bench:hf
 ```
 
 Outputs are written to `readiness_bench/results/*.json` and `readiness_bench/results/*.md`.

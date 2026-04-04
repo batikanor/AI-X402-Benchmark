@@ -103,9 +103,12 @@ export interface ReadinessDashboardResponse {
     name: string;
     whatIsBenchmarked: string;
     mocked: boolean;
-    suiteId?: string | null;
-    suiteName?: string | null;
+    suiteName: string;
+    suiteVersion: string;
+    suitePath: string;
     scenarioCount: number;
+    runtimeUsed: string;
+    supportedRuntimes: string[];
     statusNote: string;
     integrationStatus: {
       isFullyConfigured: boolean;
@@ -123,6 +126,9 @@ export interface ReadinessDashboardResponse {
     finishedAt: string;
     scenarioCount: number;
     runsPerScenario: number;
+    runtime: string;
+    suiteName: string;
+    suiteVersion: string;
     models: string[];
     totalEvaluations: number;
   } | null;
@@ -130,6 +136,9 @@ export interface ReadinessDashboardResponse {
     model: string;
     overallScore: number;
     decisionAccuracyPct: number;
+    basePolicyAccuracyPct: number;
+    controlsF1Pct: number;
+    parseRatePct: number;
     fullMatchRatePct: number;
     executionEligibilityPct: number;
     workflowSuccessRatePct: number;
@@ -143,19 +152,26 @@ export interface ReadinessDashboardResponse {
   }>;
   results: Array<{
     model: string;
+    caseId: string;
+    caseName: string;
+    executionMode: "real" | "decision_only";
     scenarioId: string;
     scenarioName: string;
     attempt: number;
     expected: {
-      allow: boolean;
+      decision: string;
       approvalRequired: boolean;
       priority: string;
+      riskLevel: string;
+      requiredControls: string[];
     };
     llm: {
       parseOk: boolean;
       decision: string;
       approvalRequired: boolean | null;
       priority: string;
+      riskLevel: string;
+      requiredControls: string[];
       reason: string;
       latencyMs: number;
       error: string | null;
@@ -165,7 +181,10 @@ export interface ReadinessDashboardResponse {
       decisionMatch: boolean;
       approvalMatch: boolean;
       priorityMatch: boolean;
+      riskMatch: boolean;
       fullMatch: boolean;
+      basePolicyAccuracyPct: number;
+      controlsF1Pct: number;
       accuracyPct: number;
       executionEligible: boolean;
     };
@@ -183,10 +202,17 @@ export interface ReadinessDashboardResponse {
   scenarios: Array<{
     id: string;
     name: string;
+    executionMode: string;
+    payment: {
+      amountUsd: number;
+      destinationCountry: string;
+    };
     expected: {
-      allow: boolean;
+      decision: string;
       approvalRequired: boolean;
       priority: string;
+      riskLevel: string;
+      requiredControls: string[];
     };
   }>;
 }
@@ -229,6 +255,9 @@ export async function runBenchmark(strict: boolean): Promise<RunResponse> {
 
 export async function runReadinessBenchmark(input: {
   models: string[];
+  runtime: "ollama" | "openai_compat";
+  apiBaseUrl?: string;
+  apiKeyEnv?: string;
   runsPerScenario: number;
   maxTokens: number;
   temperature: number;

@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fetchReadinessDashboard, runReadinessBenchmark } from "@/lib/api";
 
+type RuntimeMode = "ollama" | "openai_compat";
+
+const HF_OPENAI_COMPAT_URL = "https://router.huggingface.co/v1";
+
 function metricLabel(value: number | undefined, suffix = ""): string {
   if (value === undefined || Number.isNaN(value)) {
     return "-";
@@ -81,12 +85,24 @@ function rowTopIssue(notes: string[]): string {
   return notes[0];
 }
 
+function parseModelCsv(value: string): string[] {
+  const items = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return Array.from(new Set(items)).slice(0, 6);
+}
+
 export default function HomePage() {
   const { data, error, isLoading, mutate } = useSWR("readiness-dashboard", fetchReadinessDashboard, {
     refreshInterval: 15000,
   });
 
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
+  const [runtime, setRuntime] = useState<RuntimeMode>("ollama");
+  const [customModels, setCustomModels] = useState("");
+  const [apiBaseUrl, setApiBaseUrl] = useState("");
+  const [apiKeyEnv, setApiKeyEnv] = useState("HF_TOKEN");
   const [runsPerScenario, setRunsPerScenario] = useState(1);
   const [running, setRunning] = useState(false);
   const [runSummary, setRunSummary] = useState("");
@@ -98,9 +114,14 @@ export default function HomePage() {
       const filtered = previous.filter((model) => data.availableModels.includes(model));
       if (filtered.length >= 2) return filtered;
       const seeded = [...data.recommendedModels, ...data.availableModels];
-      return Array.from(new Set(seeded)).slice(0, Math.min(3, data.availableModels.length));
+      return Array.from(new Set(seeded)).slice(0, Math.min(4, data.availableModels.length));
     });
   }, [data]);
+
+  useEffect(() => {
+    if (runtime !== "openai_compat") return;
+    setApiBaseUrl((previous) => previous || HF_OPENAI_COMPAT_URL);
+  }, [runtime]);
 
   const sortedModels = useMemo(() => {
     if (!data?.models.length) return [];
@@ -197,7 +218,7 @@ export default function HomePage() {
     return scenarios.map((scenario) => {
       const byModel = sortedModels.map((modelRow) => {
         const attemptRows = results
-          .filter((row) => row.scenarioId === scenario.id && row.model === modelRow.model)
+          .filter((row) => (row.caseId ?? row.scenarioId) === scenario.id && row.model === modelRow.model)
           .sort((a, b) => b.attempt - a.attempt);
         return {
           model: modelRow.model,
@@ -212,6 +233,12 @@ export default function HomePage() {
     });
   }, [data?.results, data?.scenarios, sortedModels]);
 
+  const effectiveModels = useMemo(() => {
+    const parsed = parseModelCsv(customModels);
+    if (parsed.length) return parsed;
+    return selectedModels;
+  }, [customModels, selectedModels]);
+
   function toggleModelSelection(model: string) {
     setSelectedModels((previous) => {
       if (previous.includes(model)) {
@@ -225,7 +252,7 @@ export default function HomePage() {
   }
 
   async function handleRun() {
-    if (selectedModels.length < 2) {
+    if (effectiveModels.length < 2) {
       setRunSummary("Select at least 2 models to run a readiness comparison.");
       return;
     }
@@ -233,7 +260,10 @@ export default function HomePage() {
     try {
       setRunning(true);
       const result = await runReadinessBenchmark({
-        models: selectedModels,
+        models: effectiveModels,
+        runtime,
+        apiBaseUrl: apiBaseUrl.trim() || undefined,
+        apiKeyEnv: apiKeyEnv.trim() || undefined,
         runsPerScenario,
         maxTokens: 512,
         temperature: 0.1,
@@ -254,7 +284,7 @@ export default function HomePage() {
           setRunSummary("Readiness run completed. Dashboard is refreshing.");
         }
       } else {
-        setRunSummary(`Readiness run failed (code ${result.returnCode}). Check technical logs.`);
+        setRunSummary(`Readiness run not completed (code ${result.returnCode}). Check technical logs.`);
       }
     } catch (runError) {
       const message = runError instanceof Error ? runError.message : String(runError);
@@ -322,7 +352,11 @@ export default function HomePage() {
               </p>
               <div className="flex flex-wrap gap-2 text-xs">
                 <Badge className="border-white/20 bg-white/5 text-white">Mocked: {data?.track.mocked === false ? "No" : "Unknown"}</Badge>
-                <Badge className="border-white/20 bg-white/5 text-white">Scenarios: {data?.track.scenarioCount ?? "-"}</Badge>
+                <Badge className="border-white/20 bg-white/5 text-white">Cases: {data?.track.scenarioCount ?? "-"}</Badge>
+                <Badge className="border-white/20 bg-white/5 text-white">Runtime: {data?.latest?.runtime ?? data?.track.runtimeUsed ?? "-"}</Badge>
+                <Badge className="border-white/20 bg-white/5 text-white">
+                  Suite: {data?.track.suiteName ?? "-"} v{data?.track.suiteVersion ?? "-"}
+                </Badge>
                 <Badge className="border-white/20 bg-white/5 text-white">
                   Integrations ready: {data?.track.integrationStatus?.isFullyConfigured ? "Yes" : "Partial"}
                 </Badge>
@@ -337,7 +371,22 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-            <div className="space-y-2">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label htmlFor="runtime-mode" className="text-sm font-medium">
+                  Model runtime
+                </label>
+                <select
+                  id="runtime-mode"
+                  value={runtime}
+                  onChange={(event) => setRuntime(event.target.value as RuntimeMode)}
+                  className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                >
+                  <option value="ollama">Ollama (local models)</option>
+                  <option value="openai_compat">OpenAI-compatible (HF Router/OpenRouter/hosted)</option>
+                </select>
+              </div>
+
               <p className="text-sm font-medium">Select models to benchmark (2 to 6)</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {(data?.availableModels ?? []).map((model) => {
@@ -364,10 +413,56 @@ export default function HomePage() {
                   );
                 })}
               </div>
-              {!data?.availableModels.length && !isLoading ? (
+              {!data?.availableModels.length && !isLoading && runtime === "ollama" ? (
                 <p className="text-xs text-amber-200">
                   No Ollama models detected. Install at least 2 text models first.
                 </p>
+              ) : null}
+
+              <Card className="space-y-2 bg-soft/50 p-4">
+                <label htmlFor="custom-models" className="text-sm font-medium">
+                  Custom model list (comma-separated, overrides checkbox selection when filled)
+                </label>
+                <input
+                  id="custom-models"
+                  value={customModels}
+                  onChange={(event) => setCustomModels(event.target.value)}
+                  placeholder="gemma4:e4b,qwen3:4b-instruct,phi4:14b"
+                  className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                />
+                <p className="text-xs text-slate-400">Effective models: {effectiveModels.length ? effectiveModels.join(", ") : "-"}</p>
+              </Card>
+
+              {runtime === "openai_compat" ? (
+                <Card className="space-y-3 bg-soft/50 p-4">
+                  <div className="space-y-1">
+                    <label htmlFor="api-base-url" className="text-sm font-medium">
+                      OpenAI-compatible base URL
+                    </label>
+                    <input
+                      id="api-base-url"
+                      value={apiBaseUrl}
+                      onChange={(event) => setApiBaseUrl(event.target.value)}
+                      placeholder={HF_OPENAI_COMPAT_URL}
+                      className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="api-key-env" className="text-sm font-medium">
+                      API key env var name
+                    </label>
+                    <input
+                      id="api-key-env"
+                      value={apiKeyEnv}
+                      onChange={(event) => setApiKeyEnv(event.target.value.toUpperCase())}
+                      placeholder="HF_TOKEN"
+                      className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    For Hugging Face Router, set <code>HF_TOKEN</code> and use <code>{HF_OPENAI_COMPAT_URL}</code>.
+                  </p>
+                </Card>
               ) : null}
             </div>
 
@@ -387,7 +482,7 @@ export default function HomePage() {
                   <option value={3}>3 (highest confidence)</option>
                 </select>
               </div>
-              <Button onClick={handleRun} disabled={running || selectedModels.length < 2} className="w-full gap-2">
+              <Button onClick={handleRun} disabled={running || effectiveModels.length < 2} className="w-full gap-2">
                 <RefreshCw size={16} className={running ? "animate-spin" : ""} />
                 {running ? "Running integrated benchmark..." : "Run Readiness Benchmark"}
               </Button>
@@ -430,6 +525,9 @@ export default function HomePage() {
                     <th className="px-2 py-2">Model</th>
                     <th className="px-2 py-2">Overall</th>
                     <th className="px-2 py-2">Decision Accuracy %</th>
+                    <th className="px-2 py-2">Base Policy %</th>
+                    <th className="px-2 py-2">Controls F1 %</th>
+                    <th className="px-2 py-2">Parse Rate %</th>
                     <th className="px-2 py-2">Full Match %</th>
                     <th className="px-2 py-2">Workflow Success %</th>
                     <th className="px-2 py-2">Execution Eligibility %</th>
@@ -442,6 +540,9 @@ export default function HomePage() {
                       <td className="px-2 py-2">{row.model}</td>
                       <td className="px-2 py-2">{metricLabel(row.overallScore)}</td>
                       <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.basePolicyAccuracyPct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.controlsF1Pct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.parseRatePct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.fullMatchRatePct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.workflowSuccessRatePct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.executionEligibilityPct)}</td>
@@ -450,7 +551,7 @@ export default function HomePage() {
                   ))}
                   {!sortedModels.length && !isLoading ? (
                     <tr>
-                      <td className="px-2 py-3 text-slate-400" colSpan={7}>
+                      <td className="px-2 py-3 text-slate-400" colSpan={10}>
                         No readiness benchmark results yet.
                       </td>
                     </tr>
@@ -466,7 +567,10 @@ export default function HomePage() {
                 <Card key={row.scenario.id} className="bg-soft/50 p-4">
                   <p className="text-sm font-semibold text-slate-100">{row.scenario.name}</p>
                   <p className="mt-1 text-xs text-slate-400">
-                    Expected: decision {row.scenario.expected.allow ? "allow" : "block"}, approvalRequired {String(row.scenario.expected.approvalRequired)}, priority {row.scenario.expected.priority}
+                    Expected: decision {row.scenario.expected.decision}, approvalRequired {String(row.scenario.expected.approvalRequired)}, priority {row.scenario.expected.priority}, risk {row.scenario.expected.riskLevel}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Controls: {(row.scenario.expected.requiredControls ?? []).join(", ") || "none"} | Mode: {row.scenario.executionMode}
                   </p>
                   <div className="mt-3 overflow-x-auto">
                     <table className="min-w-full text-left text-xs">
@@ -485,7 +589,7 @@ export default function HomePage() {
                             <td className="px-2 py-2">{entry.model}</td>
                             <td className="px-2 py-2">
                               {entry.latest
-                                ? `${entry.latest.llm.decision}, approval=${String(entry.latest.llm.approvalRequired)}, priority=${entry.latest.llm.priority}`
+                                ? `${entry.latest.llm.decision}, approval=${String(entry.latest.llm.approvalRequired)}, priority=${entry.latest.llm.priority}, risk=${entry.latest.llm.riskLevel}`
                                 : "-"}
                             </td>
                             <td className="px-2 py-2">{entry.latest ? metricLabel(entry.latest.evaluation.accuracyPct) : "-"}</td>

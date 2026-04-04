@@ -16,7 +16,8 @@
     "ui:start": "npm --prefix frontend run start",
     "llm:bench": "node scripts/run_ollama_llm_benchmark.mjs --suite llm_bench/suite.json --models gemma4:e4b --outdir llm_bench/results",
     "llm:bench:duel": "node scripts/run_ollama_llm_benchmark.mjs --suite llm_bench/suite.json --models gemma4:e4b,qwen3:4b-instruct --outdir llm_bench/results",
-    "readiness:bench": "node scripts/run_llm_readiness_benchmark.mjs --config config/benchmark.config.json --models gemma4:e4b,qwen3:4b-instruct --outdir readiness_bench/results"
+    "readiness:bench": "node scripts/run_llm_readiness_benchmark.mjs --config config/benchmark.config.json --suite readiness_bench/suite.json --runtime ollama --models gemma4:e4b,qwen3:4b-instruct,phi4:14b,qwen2.5:0.5b --outdir readiness_bench/results",
+    "readiness:bench:hf": "node scripts/run_llm_readiness_benchmark.mjs --config config/benchmark.config.json --suite readiness_bench/suite.json --runtime openai_compat --api-base-url https://router.huggingface.co/v1 --api-key-env HF_TOKEN --models Qwen/Qwen3-4B-Instruct,google/gemma-3-4b-it --outdir readiness_bench/results"
   },
   "engines": {
     "node": ">=20"

@@ -186,6 +186,7 @@ describe("x402 frontend api", () => {
 
     const result = await runReadinessBenchmark({
       models: ["gemma4:e4b", "qwen3:4b-instruct"],
+      runtime: "ollama",
       runsPerScenario: 1,
       maxTokens: 512,
       temperature: 0.1,
@@ -199,6 +200,7 @@ describe("x402 frontend api", () => {
     expect(options.headers).toEqual({ "Content-Type": "application/json" });
     expect(JSON.parse(String(options.body))).toEqual({
       models: ["gemma4:e4b", "qwen3:4b-instruct"],
+      runtime: "ollama",
       runsPerScenario: 1,
       maxTokens: 512,
       temperature: 0.1,
@@ -254,6 +256,7 @@ describe("x402 frontend api", () => {
     await expect(
       runReadinessBenchmark({
         models: ["gemma4:e4b", "qwen3:4b-instruct"],
+        runtime: "ollama",
         runsPerScenario: 1,
         maxTokens: 512,
         temperature: 0.1,
