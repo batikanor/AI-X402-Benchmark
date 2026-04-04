@@ -15,11 +15,37 @@ function metricLabel(value: number | undefined, suffix = ""): string {
   return `${value.toFixed(2)}${suffix}`;
 }
 
+function compactLog(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.length <= 4000) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, 4000)}\n...[truncated]`;
+}
+
+function summarizeFailure(returnCode: number, stderr: string, stdout: string): string {
+  const combined = `${stderr}\n${stdout}`.replace(/\s+/g, " ").trim();
+  if (!combined) {
+    return `Run failed (code ${returnCode}).`;
+  }
+  if (combined.includes("CHAINLINK_WEBHOOK_URL")) {
+    return `Run failed (code ${returnCode}). Missing Chainlink webhook configuration.`;
+  }
+  if (combined.toLowerCase().includes("timed out")) {
+    return `Run failed (code ${returnCode}). Benchmark timed out.`;
+  }
+  return `Run failed (code ${returnCode}): ${combined.slice(0, 180)}`;
+}
+
 export default function HomePage() {
   const { data, error, isLoading, mutate } = useSWR("dashboard", fetchDashboard, { refreshInterval: 15000 });
   const [running, setRunning] = useState(false);
   const [strict, setStrict] = useState(false);
-  const [runLog, setRunLog] = useState<string>("");
+  const [runSummary, setRunSummary] = useState<string>("");
+  const [runTechnicalLog, setRunTechnicalLog] = useState<string>("");
 
   const latest = data?.latest;
   const project = data?.project;
@@ -35,11 +61,25 @@ export default function HomePage() {
     try {
       setRunning(true);
       const result = await runBenchmark(strict);
-      setRunLog(result.stdout || result.stderr || "Benchmark run finished.");
-      await mutate();
+      setRunTechnicalLog(compactLog(result.stdout || result.stderr || ""));
+      const updated = await mutate();
+      const latestAfterRun = updated?.latest;
+
+      if (result.ok) {
+        if (latestAfterRun) {
+          setRunSummary(
+            `Run completed. Score ${metricLabel(latestAfterRun.overallScore)}, success ${latestAfterRun.successful}/${latestAfterRun.totalScenarios}, p95 ${metricLabel(latestAfterRun.p95TotalMs, " ms")}, run ID ${latestAfterRun.runId}.`,
+          );
+        } else {
+          setRunSummary("Run completed. Dashboard is refreshing with latest metrics.");
+        }
+      } else {
+        setRunSummary(summarizeFailure(result.returnCode, result.stderr, result.stdout));
+      }
     } catch (runError) {
       const message = runError instanceof Error ? runError.message : String(runError);
-      setRunLog(message);
+      setRunSummary(`Run failed: ${message}`);
+      setRunTechnicalLog(compactLog(message));
     } finally {
       setRunning(false);
     }
@@ -79,7 +119,15 @@ export default function HomePage() {
             <RefreshCw size={16} className={running ? "animate-spin" : ""} />
             {running ? "Running benchmark..." : "Run Benchmark"}
           </Button>
-          <p className="text-xs text-slate-400">{runLog || "Run output will appear here."}</p>
+          <p className="text-xs text-slate-300">{runSummary || "Run status will appear here."}</p>
+          {runTechnicalLog ? (
+            <details className="text-xs text-slate-400">
+              <summary className="cursor-pointer">Technical logs</summary>
+              <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-soft/60 p-2 text-[11px] leading-4">
+                {runTechnicalLog}
+              </pre>
+            </details>
+          ) : null}
         </Card>
       </section>
 
