@@ -1,0 +1,383 @@
+{
+  "name": "x402Bench Official Sponsor Docs",
+  "version": "2026-04-04",
+  "generatedAt": "2026-04-04T16:29:27.597Z",
+  "sources": [
+    {
+      "id": "hedera-transaction-id",
+      "title": "Hedera TransactionId",
+      "url": "https://docs.hedera.com/hedera/sdks-and-apis/hedera-api/basic-types/transactionid",
+      "fetchedAt": "2026-04-04T16:29:26.420Z",
+      "chunks": [
+        {
+          "text": "TransactionID - Hedera \n Skip to main content \n Hedera home page\n\nSearch...\n\n⌘ K Ask AI \n Join Hackathon \n Dev Portal \n Dev Portal\n\nSearch...\n\nNavigation \n Basic Types \n TransactionID\n\nStatus \n \nDiscord \n \nPlayground \n \nBlog \n \n Welcome to Hedera — let’s build the future\n\nHedera Native Developers\n \n EVM Developers\n \n Tutorials\n \n Networks\n \n Core Concepts\n \n Open Source Solutions and Integrations\n \n SDKs & APIs\n Overview\n\nSDKs\n \n Mirror Node REST API\n \n Hedera Consensus Service gRPC API\n\nHedera APIs\n Basic Types\n Overview\n\nAccountAmount\n\nAccountID\n\nContractID\n\nCryptoAllowance\n\nCurrentAndNextFeeSchedule\n\nFeeComponents\n\nFeeData\n\nFeeSchedule\n\nFileID\n\nFraction\n\nHederaFunctionality\n\nKey\n\nKeyList"
+        },
+        {
+          "text": "NftAllowance\n\nNftTransfer\n\nNodeAddress\n\nNodeAddressBook\n\nRealmID\n\nScheduleID\n\nSemanticVersion\n\nServicesConfigurationList\n\nServiceEndpoint\n\nSetting\n\nShardID\n\nSignature\n\nSignatureList\n\nSignatureMap\n\nSignaturePair\n\nSubType\n\nTransferList\n\nTransactionID\n\nThresholdKey\n\nThresholdSignature\n\nTokenAllowance\n\nTokenBalance\n\nTokenBalances\n\nTokenFreezeStatus\n\nTokenPauseStatus\n\nTokenID\n\nTokenKycStatus\n\nTokenRelationship\n\nTokenTransferList\n\nTokenType\n\nTokenSupplyType\n\nTopicID\n\nTransactionFeeSchedule"
+        },
+        {
+          "text": "Cryptocurrency Accounts\n \n Consensus Service\n \n Schedule Service\n \n Token Service\n \n File Service\n \n Smart Contracts\n \n Miscellaneous\n \n \n Hedera Status API\n \n Smart Contract Verification API\n \n \n Support & Community\n \n FAQs\n\nBasic Types\n TransactionID\n Copy page"
+        },
+        {
+          "text": "Copy page \n \n The ID for a transaction. This is used for retrieving receipts and records for a transaction, for appending to a file right after creating it, for instantiating a smart contract with bytecode in a file just created, and internally by the network for detecting when duplicate transactions are submitted. A user might get a transaction processed faster by submitting it to N nodes, each with a different node account, but all with the same TransactionID. Then, the transaction will take effect when the first of all those nodes submits the transaction and it reaches consensus. The other transactions will not take effect. So this could make the transaction take effect faster, if any given node might be slow. However, the full transaction fee is charged for each transaction, so the total fee is N times as much if the transaction is sent to N nodes. \n Applicable to Scheduled Transactions \n \n The ID of a Scheduled Transaction has transactionValidStart and accountIDs inherited from the ScheduleCreate transaction that created it. That is to say that they are equal"
+        },
+        {
+          "text": "The scheduled property is true for Scheduled Transactions\n\ntransactionValidStart , accountID and scheduled properties should be omitted"
+        },
+        {
+          "text": "Field Type Description \n transactionValidStart ​ Timestamp ​ The transaction is invalid if consensusTimestamp < transactionID.transactionStartValid \n accountID ​ AccountID ​ The Account ID that paid for this transaction \n scheduled bool Whether the Transaction is of type Scheduled or no \n nonce int32 The identifier for an internal transaction that was spawned as part of handling a user transaction. (These internal transactions share the transactionValidStart and accountID of the user transaction, so a\n nonce is necessary to give them a unique TransactionID.)\n \nAn example is when a “parent” ContractCreate or ContractCall transaction calls one or more HTS precompiled contracts; each of the “child” transactions spawned for a precompile has a id with a different nonce."
+        },
+        {
+          "text": "Was this page helpful?\n Yes No \n Suggest edits Raise issue\n\nTransferList ThresholdKey \n ⌘ I\n\ndiscord facebook linkedin medium reddit telegram x youtube\n\nAssistant\n\nResponses are generated using AI and may contain mistakes.\n\nSuggestions\n How do I query transaction data? How do I create tokens and accounts? How do I submit my first transaction?\n\nContact support"
+        }
+      ]
+    },
+    {
+      "id": "hedera-mirror-nodes",
+      "title": "Hedera Mirror Nodes",
+      "url": "https://docs.hedera.com/hedera/core-concepts/mirror-nodes",
+      "fetchedAt": "2026-04-04T16:29:26.521Z",
+      "chunks": [
+        {
+          "text": "Mirror Nodes - Hedera \n Skip to main content \n Hedera home page\n\nSearch...\n\n⌘ K Ask AI \n Join Hackathon \n Dev Portal \n Dev Portal\n\nSearch...\n\nNavigation \n Mirror Nodes \n Mirror Nodes\n\nStatus \n \nDiscord \n \nPlayground \n \nBlog \n \n Welcome to Hedera — let’s build the future\n\nHedera Native Developers\n \n EVM Developers\n \n Tutorials\n \n Networks\n \n Core Concepts\n Overview\n\nAccounts\n \n Keys and Signatures\n\nSchedule Transaction\n\nSmart Contracts\n \n Tokens\n \n Staking\n \n Hashgraph Consensus Algorithm\n \n Transactions and Queries\n \n State and History\n\nMirror Nodes\n Overview\n\nHedera Mirror Node\n\nOne Click Mirror Node Deployment"
+        },
+        {
+          "text": "Run Your Own Mirror Node\n \n \n \n Open Source Solutions and Integrations\n \n SDKs & APIs\n \n Support & Community\n \n FAQs\n\nOn this page Understanding Mirror Nodes \n Understanding Block Streams After HIP-1259 \n Simplified Fee Structure \n The Daily Synthetic Transaction \n Benefits for Mirror Node Operators \n Smart Contract Synthetic Logs \n REST API from Hedera \n Run a Mirror Node \n FAQ\n\nMirror Nodes\n Mirror Nodes\n Copy page\n\nStore history and cost-effectively query data"
+        },
+        {
+          "text": "Copy page \n \n Mirror nodes provide a way to store and cost-effectively query historical data from the public ledger while minimizing the use of Hedera network resources. Mirror nodes support the Hedera network services currently available and can be used to retrieve the following information: \n \n Transactions and records\n\nEvent files\n\n​ \n \n Understanding Mirror Nodes\n\nHedera Mirror Nodes receive information from Hedera network consensus nodes, either mainnet or testnet, and provide a more effective means to perform: \n \n Queries\n\nAnalytics\n\nAudit support\n\nMonitoring"
+        },
+        {
+          "text": "While mirror nodes receive information from the consensus nodes, they do not contribute to consensus themselves. The trust of Hedera is derived based on the consensus reached by the consensus nodes. That trust is transferred to the mirror nodes using signatures, chain of hashes, and state proofs. \n To make the initial deployments easier, mirror nodes historically provided periodic files containing processed information (such as account balances or transaction records). However, starting from Hedera release v0.42.0 , the generation and availability of account balance files by consensus nodes have been discontinued due to scalability challenges (see HIP-794 ). Users needing balance information are now required to generate it from record files processed by mirror nodes. \n The mirror node software reduces the processing burden by receiving pre-constructed files from the network, validating them, populating a database, and providing REST APIs. \n \n Mirror nodes work by validating the signature files associated with record and event files (previously also balance files) from the consensus nodes that were uploaded to a cloud storage solution from the network. \n As transactions reach consensus on the Hedera network, either mainnet or testnet, Hedera consensus nodes add the transaction and its associated records to a record file. A record file contains a series of ordered transactions and their associated records. After a given amount of time, a record file is closed and a new one is created. This process repeats as the network continues to receive transactions. \n Once a record file is closed, the consensus nodes generate a signature file. The signature file contains a signature for the corresponding record file’s hash. Along with the signature file of the consensus node, the record file also contains the hash of the previous record file. The former record file can now be verified by matching the hash of the previous record file. \n Hedera consensus nodes push new record files and signature files to the cloud storage provider – currently AWS S3 and Google File Storage are supported. Mirror nodes download these files, verify their signatures based on their hashes, and only then make them available to be processed. \n ​ \n \n Understanding Block Streams After HIP-1259"
+        },
+        {
+          "text": "For Mirror Node and block stream consumers, HIP-1259 significantly simplifies the data related to transaction fees, leading to smaller block stream files and reduced data ingestion costs. \n ​ \n \n Simplified Fee Structure\n\nThe primary change is the consolidation of all transaction fees into a single transfer to the Fee Collection Account ( 0.0.802 ) . \n \n Before HIP-1259: Each transaction record contained multiple fee-related transfers, increasing the size and complexity of the block stream.\n\nAfter HIP-1259: Each transaction record now contains only a single, clear fee transfer to 0.0.802 . This reduces the amount of data per transaction, making block streams more efficient."
+        },
+        {
+          "text": "​ \n \n The Daily Synthetic Transaction\n\nA new pattern to be aware of is the daily synthetic distribution transaction . This is a network-generated transaction that occurs once per day at the end of each staking period. It is responsible for distributing the fees accumulated in 0.0.802 . \n As a block stream consumer, you can identify this transaction by the following characteristics: \n \n It will contain a single large debit from account 0.0.802 .\n\nIt will have a long list of credit transfers to node operator accounts, the staking rewards account ( 0.0.800 ), the node rewards account ( 0.0.801 ), and the network treasury ( 0.0.98 ).\n\nIt appears in the block stream like any other transaction."
+        },
+        {
+          "text": "This synthetic transaction is the only time you will see funds being transferred out of the Fee Collection Account . All other transactions involving 0.0.802 will be credit transfers into the account.\n\n​ \n \n Benefits for Mirror Node Operators\n\nReduced Storage Costs: Smaller block stream files mean lower storage requirements for running a mirror node.\n\nFaster Data Ingestion: Simpler transaction records can be processed more quickly, improving the speed of data ingestion and synchronization.\n\nEasier Data Analysis: The fee structure is more straightforward, making it easier to analyze transaction costs and network revenue.\n\n​ \n \n Smart Contract Synthetic Logs"
+        },
+        {
+          "text": "Starting with v0.79 of Hedera Mirror Node release, synthetic event logs for Hedera Token Service (HTS) token transactions have been introduced to mimic the behavior of smart contract tokens. Synthetic events are generated for transactions such as: \n \n CryptoTransfer\n\nCryptoApproveAllowance\n\nCryptoDeleteAllowance\n\nTokenMint\n\nTokenWipe\n\nTokenBurn\n\nThis feature enables developers to effectively monitor HTS token activities as if they were smart contract tokens. An example code implementation demonstrating using ethers.js to listen to synthetic events can be found here . \n ​ \n \n REST API from Hedera"
+        },
+        {
+          "text": "Hedera provides REST APIs to easily query a mirror node that is hosted by Hedera, removing the complexity of having to run your own. Check out the mirror node REST API docs below. \n \n Rest API\n\n​ \n \n Run a Mirror Node\n\nAnyone can run a Hedera Mirror Node by downloading and configuring the software on their computer. By running a mirror node, you are able to connect to the appropriate cloud storage and store account balance files, record files, and event files as described above. Please check out the below links on how to get started. \n \n Run Your Own Beta Mirror Node\n\nOne Click Mirror Node Deployment\n\n​ \n \n FAQ"
+        },
+        {
+          "text": "How is data stored in a Hedera Mirror Node? Is it a specific type of database, or does it use a unique data structure?\n\nHedera Mirror Nodes use PostgreSQL databases to store the transaction and event data organized in a structure that mirrors the Hedera Network. Once the mirror node receives record files from Hedera Consensus nodes, the data is validated and loaded into the database. \n \n \n \n How do I run my own Hedera Mirror Node? What are the hardware and software requirements?"
+        },
+        {
+          "text": "Setting up a Hedera Mirror Node involves both hardware and software components. The requirements can be found here . To run your mirror node, follow the steps in the “ Run Your Own Mirror Node ” guide. \n \n \n \n Are there costs associated with running a mirror node?\n\nNo, Hedera does not charge for running a mirror node. However, there are costs associated with purchasing the hardware, internet connection, and potential cloud service fees. The hardware and software requirements can be found here . \n \n \n \n How do I configure a mirror node and query data?"
+        },
+        {
+          "text": "You can configure your own Hedera Mirror Node by following the step-by-step instructions provided in the “ How to Configure a Mirror Node and Query Data ” guide. The guide provides instructions on prerequisites, node setup, configuration, and querying the node. Additionally, you can find more details about retention and transaction and entity filtering in the guide. \n \n \n \n How can I provide feedback or create an issue to log errors?\n\nTo provide feedback or log errors, please refer to the Contributing Guide and submit an issue in the Hedera Docs GitHub repository . \n \n Was this page helpful?\n Yes No \n Suggest edits Raise issue\n\nState and History Hedera Mirror Node \n ⌘ I"
+        },
+        {
+          "text": "discord facebook linkedin medium reddit telegram x youtube\n\nAssistant\n\nResponses are generated using AI and may contain mistakes.\n\nSuggestions\n How do I query transaction data? How do I create tokens and accounts? How do I submit my first transaction?\n\nContact support"
+        }
+      ]
+    },
+    {
+      "id": "chainlink-data-feeds-responsibilities",
+      "title": "Chainlink Data Feeds Developer Responsibilities",
+      "url": "https://docs.chain.link/data-feeds/developer-responsibilities",
+      "fetchedAt": "2026-04-04T16:29:26.714Z",
+      "chunks": [
+        {
+          "text": "Developer Responsibilities: Market Integrity and Application Code Risks | Chainlink Documentation \n \n \n Resources \n Docs \n Demos \n Tools \n Changelog \n Get Certified\n\nOverview \n Developer Responsibilities \n Market Integrity Risks \n Application Code Risks \n \n On this page\n\nData Feeds\n\nQuick Links Github"
+        },
+        {
+          "text": "Data Feeds \n \n \n \n Chainlink Data Feeds Overview \n Getting Started \n Developer Responsibilities \n Feed Types Price Feeds \n Tokenized Equity Feeds Provider Catalog Ondo Finance \n \n \n SmartData Multiple-Variable Response (MVR) Feeds \n \n Smart Value Recapture (SVR) Feeds Searcher Onboarding: Ethereum Mainnet \n Searcher Onboarding: Atlas (Base, Arbitrum, BNB Chain) \n \n Rate and Volatility Feeds \n L2 Sequencer Uptime Feeds \n Self-Managed Feeds \n \n Flags Contract Registry \n Data Sources \n Release Notes \n \n Feed Addresses Price Feeds \n U.S. Government Macroeconomic Data Feeds \n SmartData Feeds \n Rate and Volatility Feeds \n Selecting Quality Data Feeds \n Deprecating Feeds \n \n Ethereum and EVM Guides Using Data Feeds \n Using MVR Feeds Using MVR Feeds on EVM Chains (Solidity) \n Using MVR Feeds with ethers.js (JS) \n Using MVR Feeds with Viem (TS) \n \n Getting Historical Data \n Using ENS with Data Feeds \n \n Aptos Guides Data Feeds on Aptos \n \n Solana Guides Data Feeds on Solana \n Using Data Feeds Offchain \n Using Data Feeds Onchain \n \n Starknet Guides Data Feeds on Starknet \n Starknet Foundry Guides Read Data from Chainlink Data Feeds (Offchain) \n Deploy and interact with a Consumer Contract (Onchain) \n Experiment on a Devnet \n \n \n Tron Guides Data Feeds on Tron \n \n API Reference Data Feeds API Reference \n MVR Feeds API Reference \n \n Resources Smart Contract Overview \n LINK Token Contracts Acquire testnet LINK \n Fund Your Contracts \n \n Starter Kits and Frameworks \n Bridges and Associated Risks \n Chainlink Oracle Platform Data Standard \n Interoperability Standard \n Compliance Standard \n Privacy Standard \n \n Chainlink Architecture Basic Request Model \n Decentralized Data Model \n Offchain Reporting \n \n Developer Communications Getting Help \n Hackathon Resources \n \n Integrating EVM Networks \n Contributing to Chainlink \n \n Developer Responsibilities: Market Integrity and Application Code Risks\n Chainlink Data Feeds provide access to highly secure, reliable, and decentralized real-world data published onchain. The assets priced by Chainlink Data Feeds are subject to market conditions beyond the ability of Chainlink node operators to control, as such developers are responsible for ensuring that the operation and performance of Chainlink Data Feeds match expectations."
+        },
+        {
+          "text": "When integrating Chainlink Data Feeds, developers must understand that the performance of feeds is subject to risks associated with both market integrity and application code.\n\nMarket Integrity Risks are those associated with external market conditions impacting price behavior and data quality in unanticipated ways. Developers are solely responsible for monitoring and mitigating any potential market integrity risks.\n\nApplication Code Risks are those associated with the quality, reliability, and dependencies of the code on which an application operates. Developers are solely responsible for monitoring and mitigating any potential application code risks."
+        },
+        {
+          "text": "Please refer to this guide for additional information about market integrity risks and how developers can protect their applications.\n\nDeveloper Responsibilities\n\nDevelopers are responsible for maintaining the security and user experience of their applications. They must also securely manage all interactions between their applications and third-party services.\n\nIn particular, developers implementing Chainlink Data Feeds in their code and applications are responsible for their application's market integrity and code risks that may cause unanticipated pricing data behavior. These are described below in more detail.\n\nMarket Integrity Risks"
+        },
+        {
+          "text": "Market conditions can impact the pricing behavior of assets in ways beyond the ability of Chainlink node operators to predict or control."
+        },
+        {
+          "text": "Market integrity risk factors can include but are not limited to, market manipulation such as Spoofing, Ramping, Bear Raids, Cross-Market Manipulation, Washtrading, and Frontrunning. All assets are susceptible to market risk , but in particular, assets with high market risk, such as those with low liquidity, are the most vulnerable to market manipulation. Developers are solely responsible for accounting for such risk factors when integrating Chainlink Data Feeds into their applications. Developers should understand the market risks around the assets they intend their application to support before integrating associated Chainlink Data Feeds and inform their end users about applicable market risks."
+        },
+        {
+          "text": "Developers should reference the following additional information when implementing Chainlink Data Feeds:\n\nData Feed Categories to evaluate market integrity risks associated with specific Chainlink Data Feeds Developers intend to integrate.\n\nEvaluating Data Source Risks to evaluate risk mitigation techniques associated with Chainlink Data Feeds broadly.\n\nApplication Code Risks\n\nDevelopers implementing Chainlink Data Feeds are solely responsible for instituting the requisite risk mitigation processes including, but not limited to, data quality checks, circuit breakers, and appropriate contingency logic for their use case."
+        },
+        {
+          "text": "Code quality and reliability: Developers must execute code using Chainlink Data Feeds only if the code meets the quality and reliability requirements for their use case and application.\n\nCode and application audits: Developers are responsible for auditing their code and applications before deploying to production. Developers must determine the quality of any audits and ensure that they meet the requirements for their application.\n\nCode dependencies and imports: Developers are responsible for ensuring the quality, reliability, and security of any dependencies or imported packages that they use with Chainlink Data Feeds, and review and audit these dependencies and packages."
+        },
+        {
+          "text": "On this page\n Overview \n Developer Responsibilities \n Market Integrity Risks \n Application Code Risks \n \n More\n Complete Data Feeds docs (TXT)\n \n Edit this page\n \n Quick links for builders\n \n Join our community\n \n Feedback\n Was this page helpful?\n Yes \n No"
+        },
+        {
+          "text": "Get the latest Chainlink content straight to your inbox.\n Email Address \n \n Developers\n Developer Resources \n Builder Quick Links \n LINK Token Contracts \n Data Feeds \n Data Streams \n VRF \n Automation \n Functions \n CCIP \n Solutions\n Overview \n DeFi \n Chainlink VRF \n Community\n Chainlink Hackathon \n Community overview \n Events \n Become an advocate \n Code of conduct \n Chainlink\n Ecosystem \n Press \n Blog \n Team \n Careers WE ARE HIRING!\n \n \n Brand assets \n FAQs \n Contact\n Security \n Support \n Press inquiries \n Social\n Twitter \n \nYouTube\n \n Discord \n Telegram \n WeChat \n Reddit \n \n Chainlink®\n &copy 2026 Chainlink Foundation\n\nPrivacy Policy Terms of Use"
+        }
+      ]
+    },
+    {
+      "id": "chainlink-automation-best-practice",
+      "title": "Chainlink Automation Best Practice",
+      "url": "https://docs.chain.link/chainlink-automation/concepts/best-practice",
+      "fetchedAt": "2026-04-04T16:29:27.013Z",
+      "chunks": [
+        {
+          "text": "Automation Best Practices | Chainlink Documentation \n \n \n Resources \n Docs \n Demos \n Tools \n Changelog \n Get Certified\n\nOverview \n Use the latest version of Chainlink Automation \n Make registry and registrar addresses configurable \n Use the Forwarder \n Verify Data Streams reports fetched with StreamsLookup \n Avoid \"flickering\" custom logic upkeeps \n Always test your contracts \n Using ERC-677 tokens \n Automation v1 upkeep revalidation \n \n On this page\n\nAutomation\n\nQuick Links Github"
+        },
+        {
+          "text": "Automation \n \n \n \n Chainlink Automation Overview \n Getting Started \n Billing and Costs \n Supported Networks \n Best Practices \n Service Limits \n Migrate to Automation v2.1 \n Release Notes \n \n Guides Create Automation-Compatible Contracts \n Access Data Streams Using Automation \n Register Time-Based Upkeeps \n Register Custom Logic Upkeeps \n Register Log Trigger Upkeeps \n Register Upkeeps Programmatically \n Secure Upkeeps Using the Forwarder \n Create Flexible, Secure, and Low-Cost Smart Contracts \n Manage your Upkeeps \n Set a gas price threshold on your upkeep \n Using the StreamsLookup error handler \n \n Concepts Concepts \n Architecture \n \n Reference Contracts \n Interfaces \n Troubleshooting and Debugging \n \n Resources Smart Contract Overview \n LINK Token Contracts Acquire testnet LINK \n Fund Your Contracts \n \n Starter Kits and Frameworks \n Bridges and Associated Risks \n Chainlink Oracle Platform Data Standard \n Interoperability Standard \n Compliance Standard \n Privacy Standard \n \n Chainlink Architecture Basic Request Model \n Decentralized Data Model \n Offchain Reporting \n \n Developer Communications Getting Help \n Hackathon Resources \n \n Integrating EVM Networks \n Contributing to Chainlink \n \n Automation Best Practices\n This guide outlines the best practices when using Chainlink Automation. These best practices are important for using Chainlink Automation securely and reliably when you create Automation-compatible contracts ."
+        },
+        {
+          "text": "Use the latest version of Chainlink Automation\n\nTo get the best reliability and security guarantees for your upkeep, use the latest version of Chainlink Automation.\n\nDeprecation of older upkeeps \n Migrate existing upkeeps before August 29, 2024 . Versions earlier\nthan 2.1 are no longer supported, and existing upkeeps on versions earlier than 2.1 will stop being performed on\nAugust 29, 2024.\n \n \n Make registry and registrar addresses configurable"
+        },
+        {
+          "text": "Where your upkeep calls the registry or the registrar, you must make the address configurable so you can migrate your upkeep easily with the one-click migration capability. If you don't make the address configurable, you must redeploy the upkeep for migrations.\n\nAlternatively, set the forwarder address when your upkeep is deployed and read the registry from the forwarder during your execution to simplify it.\n\nUse the Forwarder"
+        },
+        {
+          "text": "If your upkeep performs sensitive functions in your protocol, consider using the Forwarder to lock it down so performUpkeep can only be called by the Forwarder . Add other permissible addresses if you need to call it yourself. Note the forwarder is only determined after registration so make this a mutable variable and ensure you add a setter function with permissions for you to set it.\n\nVerify Data Streams reports fetched with StreamsLookup\n\nIf your upkeep uses StreamsLookup , ensure you use the verification interface to verify your reports onchain.\n\nAvoid \"flickering\" custom logic upkeeps"
+        },
+        {
+          "text": "The Automation DON evaluates your upkeep regularly. When your upkeep is eligible, the DON attempts to perform the upkeep. For best results, ensure that checkUpkeep remains true until execution.\n\nIf the state of your upkeep \"flickers\" by rapidly alternating between true and false, then your upkeep is at risk of not being performed. \"Flickering\" upkeeps might cause unintended consequences because there is latency between observing the state of the chain, getting consensus (v2 and later) on what needs to happen, and confirming the transaction onchain.\n\nAlways test your contracts"
+        },
+        {
+          "text": "As with all smart contract testing, it is important to test the boundaries of your smart contract in order to ensure it operates as intended. Similarly, it is important to make sure the compatible contract operates within the parameters of the Registry .\n\nTest all of your mission-critical contracts, and stress-test the contract to confirm the performance and correct operation of your use case under load and adversarial conditions. The Chainlink Automation Network will continue to operate under stress, but so should your contract. For a list of supported testnet blockchains, please review the supported networks page .\n\nUsing ERC-677 tokens"
+        },
+        {
+          "text": "For registration on Mainnet, you need ERC-677 LINK. Many token bridges give you ERC-20 LINK tokens. Use PegSwap to convert Chainlink tokens (LINK) to be ERC-677 compatible . To register on a supported testnet, get LINK for the testnet that you want to use from our faucet.\n\nAutomation v1 upkeep revalidation"
+        },
+        {
+          "text": "If your upkeep is on Automation v1, we recommend that you revalidate the conditions specified in checkUpkeep in your performUpkeep function. Automation v1 uses a turn taking system where nodes rotate to monitor your upkeep. It does not use consensus.\n \n What's next\n > Build Flexible Smart Contracts Using Automation \n > Manage your Upkeeps \n \n \n \n On this page\n Overview \n Use the latest version of Chainlink Automation \n Make registry and registrar addresses configurable \n Use the Forwarder \n Verify Data Streams reports fetched with StreamsLookup \n Avoid \"flickering\" custom logic upkeeps \n Always test your contracts \n Using ERC-677 tokens \n Automation v1 upkeep revalidation \n \n More\n Complete CHAINLINK-AUTOMATION docs (TXT)\n \n Edit this page\n \n Quick links for builders\n \n Join our community\n \n Feedback\n Was this page helpful?\n Yes \n No"
+        },
+        {
+          "text": "Get the latest Chainlink content straight to your inbox.\n Email Address \n \n Developers\n Developer Resources \n Builder Quick Links \n LINK Token Contracts \n Data Feeds \n Data Streams \n VRF \n Automation \n Functions \n CCIP \n Solutions\n Overview \n DeFi \n Chainlink VRF \n Community\n Chainlink Hackathon \n Community overview \n Events \n Become an advocate \n Code of conduct \n Chainlink\n Ecosystem \n Press \n Blog \n Team \n Careers WE ARE HIRING!\n \n \n Brand assets \n FAQs \n Contact\n Security \n Support \n Press inquiries \n Social\n Twitter \n \nYouTube\n \n Discord \n Telegram \n WeChat \n Reddit \n \n Chainlink®\n &copy 2026 Chainlink Foundation\n\nPrivacy Policy Terms of Use"
+        }
+      ]
+    },
+    {
+      "id": "ledger-clear-signing-dapps",
+      "title": "Ledger Clear Signing for dApps",
+      "url": "https://developers.ledger.com/docs/clear-signing/for-dapps/get-started",
+      "fetchedAt": "2026-04-04T16:29:27.171Z",
+      "chunks": [
+        {
+          "text": "Get started - Ledger Developer Portal Ledger Live™ is now Ledger Wallet™ and Ledger hardware wallets are now Ledger signers. Updating all references. Learn more here \n \n \n Developer Portal For dApps & Services For Blockchains For Wallets \n \n Ask AI\n\nOverview \n For dApps Get Started \n JSON Builder \n Manual Creation \n Token Support \n Test & Submit\n\nFor Wallets \n Reference ERC-7730 Specification \n Design Rationale \n External Resources\n\nOn This Page\n Prerequisites \n What you will produce \n The process \n Create your metadata file \n Validate \n Submit \n Deploy \n Choose your approach \n Common questions \n Copy page URL Scroll to top"
+        },
+        {
+          "text": "For dApps & Services Clear Signing For dApps Get Started \n How to add Clear Signing to your dApp\n\nEnable Clear Signing for your protocol in minutes. Create metadata files that transform complex transaction data into human-readable information.\n\nPrerequisites\n\nBefore you start, make sure you have the following:\n\nYour smart contract deployed on an EVM-compatible chain\n\nYour contract address and ABI (from Etherscan or your deployment artifacts)\n\nBasic familiarity with JSON\n\nClear Signing currently supports EVM-compatible chains only. Support for Solana, Cosmos, and other protocols is planned.\n\nWhat you will produce"
+        },
+        {
+          "text": "A Clear Signing metadata file is a JSON document that tells compatible wallets how to display your contract’s transactions. It describes:\n\nSmart contract functions – the intent and human-readable label for each function users sign (for example, “Send”, “Swap tokens”, “Approve spending”)\n\nEIP-712 messages – structured data your users sign off-chain (permits, orders, votes)\n\nParameter formatting – how to render amounts, addresses, timestamps, and other values\n\nHere is a minimal example for an ERC-20 transfer function:"
+        },
+        {
+          "text": "{ \n \"$schema\" : \"https://eips.ethereum.org/assets/eip-7730/erc7730-v1.schema.json\" , \n \"context\" : { \n \"contract\" : { \n \"abi\" : \"https://api.etherscan.io/api?module=contract&action=getabi&address=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\" , \n \"deployments\" : [ \n { \"chainId\" : 1 , \"address\" : \"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\" } \n ] \n } \n }, \n \"metadata\" : { \n \"owner\" : \"Circle\" , \n \"info\" : { \"url\" : \"https://www.circle.com/\" } \n }, \n \"display\" : { \n \"formats\" : { \n \"transfer(address,uint256)\" : { \n \"intent\" : \"Send\" , \n \"fields\" : [ \n { \"path\" : \"_to\" , \"label\" : \"Recipient\" , \"format\" : \"addressOrName\" }, \n { \"path\" : \"_value\" , \"label\" : \"Amount\" , \"format\" : \"tokenAmount\" , \"params\" : { \"tokenPath\" : \"@.to\" } } \n ], \n \"required\" : [ \"_to\" , \"_value\" ], \n \"excluded\" : [] \n } \n } \n } \n }"
+        },
+        {
+          "text": "The process\n\nCreate your metadata file \n Build your metadata file using the JSON Builder or write it manually.\n Validate \n Run the ERC-7730 validator to confirm the file meets the schema requirements.\n Submit \n Open a pull request to the Clear Signing Registry .\n Deploy \n Once your pull request is approved and merged, compatible wallets automatically fetch your metadata and display human-readable transaction details.\n\nChoose your approach"
+        },
+        {
+          "text": "RECOMMENDED\n JSON Builder →\n Visual tool that generates the metadata file in under 10 minutes.\n Best for: single-contract deployments, standard function signatures, no EIP-712\n Manual Implementation →\n Write the metadata file directly for full control over every field.\n Best for: EIP-712 messages, multi-chain deployments, nested tuples, reusable includes\n\nCommon questions\n\nDo I need a plugin for my smart contract?\n Most contracts work with a metadata file alone. You only need a dedicated plugin if your contract has:"
+        },
+        {
+          "text": "• Highly dynamic execution patterns that change based on on-chain state \n • Complex nested data structures requiring custom parsing logic \n • Non-standard encoding, compression, or obfuscation \n • Security requirements beyond standard validation \n Start with a metadata file. You can upgrade to a plugin later if needed. Contact support if you are unsure.\n\nMy dApp includes a built-in signing interface. What do I need to do?\n Complete the metadata process above and also implement the SDK. See the wallet implementation guide for the additional steps."
+        },
+        {
+          "text": "How long does the review process take?\n Pull requests are typically reviewed within 3–5 business days. Complex submissions with multiple contract deployments or EIP-712 schemas may take longer. See the Validate & Submit guide for details on the review criteria.\n\nContributing to Web3 Safety\n Every metadata file you submit helps protect users from blind signing attacks and builds trust in the ecosystem.\n\nOverview JSON Builder\n\nCopyright © Ledger SAS. All rights reserved. Ledger, Ledger Stax, Ledger Flex, Ledger Nano, Ledger Nano S, Ledger OS, Ledger Wallet, [LEDGER] (logo), [L] (logo) are trademarks owned by Ledger SAS.\n\nLedger Developer Portal\n Home Discord"
+        },
+        {
+          "text": "Legal\n Terms and Conditions Ledger&#x27;s privacy policy Cookie statement\n\nLedger Developer Portal Home \n Discord \n \n Legal Terms and Conditions \n Ledger&#x27;s privacy policy \n Cookie statement"
+        }
+      ]
+    },
+    {
+      "id": "ledger-clear-signing-wallets",
+      "title": "Ledger Clear Signing for Wallets",
+      "url": "https://developers.ledger.com/docs/clear-signing/for-wallets",
+      "fetchedAt": "2026-04-04T16:29:27.218Z",
+      "chunks": [
+        {
+          "text": "For Wallets - Ledger Developer Portal Ledger Live™ is now Ledger Wallet™ and Ledger hardware wallets are now Ledger signers. Updating all references. Learn more here \n \n \n Developer Portal For dApps & Services For Blockchains For Wallets \n \n Ask AI\n\nOverview \n For dApps Get Started \n JSON Builder \n Manual Creation \n Token Support \n Test & Submit\n\nFor Wallets \n Reference ERC-7730 Specification \n Design Rationale \n External Resources"
+        },
+        {
+          "text": "On This Page\n How it works \n Prerequisites \n Integrate Clear Signing \n Install the required packages \n Initialize the DMK \n Connect to the device \n Initialize the Ethereum signer with Clear Signing \n Sign a transaction \n Implementation checklist \n Best practices \n Troubleshooting \n Resources \n Copy page URL Scroll to top\n\nFor dApps & Services Clear Signing For Wallets \n How to integrate Clear Signing into your wallet\n\nIntegrate Clear Signing into your wallet to provide human-readable transaction information for your users."
+        },
+        {
+          "text": "Partner program: Wallet integration requires enrollment in Ledger’s partner program to obtain an originToken . Contact the team to discuss integration and receive your token before starting the steps below.\n\nHow it works\n\nWallet providers implement Clear Signing through Ledger’s Device Management Kit (DMK) and Device Signer Kit (DSK). When a user signs a transaction, the DSK fetches metadata for the target contract from the Clear Signing Registry and sends the human-readable field data to the Ledger signer. The signer then displays the formatted transaction details rather than the raw calldata."
+        },
+        {
+          "text": "Why DMK? The DMK was built with Clear Signing in mind. It provides observable-based patterns, TypeScript-first design, and automatic metadata fetching for all EVM-compatible chains.\n\nPrerequisites\n\nA browser environment that supports WebHID\n\nAn originToken from Ledger’s partner program\n\nIntegrate Clear Signing\n\nInstall the required packages \n npm yarn pnpm \n # Core DMK and transport \n npm install @ledgerhq/device-management-kit \\ \n @ledgerhq/device-transport-kit-web-hid \\ \n # Ethereum signer for Clear Signing \n @ledgerhq/device-signer-kit-ethereum"
+        },
+        {
+          "text": "# Core DMK and transport \n yarn add @ledgerhq/device-management-kit \\ \n @ledgerhq/device-transport-kit-web-hid \\ \n # Ethereum signer for Clear Signing \n @ledgerhq/device-signer-kit-ethereum\n\n# Core DMK and transport \n pnpm add @ledgerhq/device-management-kit \\ \n @ledgerhq/device-transport-kit-web-hid \\ \n # Ethereum signer for Clear Signing \n @ledgerhq/device-signer-kit-ethereum"
+        },
+        {
+          "text": "Initialize the DMK \n dmk-setup.ts \n import { \n DeviceManagementKitBuilder, \n ConsoleLogger \n } from \"@ledgerhq/device-management-kit\" ; \n import { webHidTransportFactory } from \"@ledgerhq/device-transport-kit-web-hid\" ; \n \n const dmk = new DeviceManagementKitBuilder () \n . addLogger ( new ConsoleLogger ()) \n . addTransport (webHidTransportFactory) \n . build ();"
+        },
+        {
+          "text": "Connect to the device \n This step must be triggered by a user gesture (such as a button click) because browsers require user interaction to open a WebHID device picker.\n device-connection.ts \n // startDiscovering() opens the browser&#x27;s device picker \n const discoveredDevices = await dmk. startDiscovering (); \n \n // In practice, present a UI so the user selects their device \n const device = discoveredDevices[ 0 ]; \n \n const sessionId = await dmk. connect ({ \n deviceId: device.id, \n });"
+        },
+        {
+          "text": "Initialize the Ethereum signer with Clear Signing \n signer-setup.ts \n import { SignerEthBuilder } from \"@ledgerhq/device-signer-kit-ethereum\" ; \n \n const signerEth = new SignerEthBuilder ({ \n dmk, \n sessionId, \n originToken: \"your-origin-token\" , // Obtained through Ledger&#x27;s partner program \n }). build ();\n\nThe originToken identifies your wallet to the Clear Signing Registry and enables metadata fetching. Store it securely and do not expose it in client-side code. To obtain your token, complete the partner program enrollment at the partner intake form ."
+        },
+        {
+          "text": "Sign a transaction \n transaction-signing.ts \n // Build your transaction object \n const transaction = { \n to: \"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\" , // USDC contract on Ethereum mainnet \n value: \"0x0\" , \n data: \"0xa9059cbb000000000000000000000000...\" , // ERC-20 transfer calldata \n chainId: 1 , \n nonce: 0 , \n gasLimit: \"0x5208\" , \n maxFeePerGas: \"0x...\" , \n maxPriorityFeePerGas: \"0x...\" , \n }; \n \n // Clear Signing is applied automatically when metadata exists for the contract \n const signature = await signerEth. signTransaction (transaction); \n \n // The user&#x27;s signer displays human-readable fields (Recipient, Amount) \n // rather than raw hex calldata"
+        },
+        {
+          "text": "For complete documentation including device discovery patterns, connection lifecycle management, and advanced configuration options, see the Device Interaction documentation .\n\nImplementation checklist"
+        },
+        {
+          "text": "Set up DMK with the WebHID transport \n \n Implement device discovery triggered by a user gesture \n \n Build a device selection UI so users can choose their signer \n \n Configure the signer with your partner program originToken \n \n Implement signTransaction , signMessage , and signTypedData flows \n \n Show users whether Clear Signing is active or whether the transaction will use blind signing \n \n Add error handling for connection failures and signing rejections \n \n Test Clear Signing display on a physical Ledger signer\n\nBest practices\n\nSecure the origin token\n Never expose your originToken in client-side code. Load it from an environment variable or server-side configuration."
+        },
+        {
+          "text": "Show signing status\n Tell users whether Clear Signing is active for a given transaction. When metadata is unavailable, display a clear blind signing warning.\n\nHandle errors gracefully\n Device disconnections and user rejections are expected. Implement retry logic and meaningful error messages rather than silent failures.\n\nTroubleshooting\n\nClear Signing is not appearing on the signer\n Verify that all of the following are true:\n • Your originToken is correctly configured and not expired\n • A metadata file exists for the target contract in the registry \n • You are using the latest published versions of the DMK and DSK packages\n • The transaction targets a supported EVM chain"
+        },
+        {
+          "text": "Device connection fails or the picker does not appear\n Common causes and solutions:\n • Confirm the browser supports WebHID/WebUSB\n • Ensure startDiscovering() is called from within a user gesture handler (click or keypress event)\n • Verify the signer is unlocked and the Ethereum app is open on the device\n • Check that transport permissions have been granted in the browser\n • Try disconnecting and reconnecting the USB cable"
+        },
+        {
+          "text": "signMessage or signTypedData does not trigger Clear Signing\n Clear Signing for EIP-712 messages requires a matching eip712 context in the registry metadata file for the target domain. If no matching file exists, the signer falls back to blind signing.\n Ask the protocol team to add EIP-712 metadata to the registry.\n\nYour wallet is now ready to display Clear Signing information for all contracts that have registered metadata. Users will see human-readable transaction details on their signer for thousands of protocols automatically.\n\nResources\n\nDMK Documentation →\n Complete API reference and integration examples\n Registry Explorer →\n Browse existing metadata implementations"
+        },
+        {
+          "text": "Start protecting your users\n With Clear Signing integrated, your wallet automatically displays human-readable information for thousands of protocols, protecting users from blind signing attacks.\n\nTest & Submit ERC-7730 Specification\n\nCopyright © Ledger SAS. All rights reserved. Ledger, Ledger Stax, Ledger Flex, Ledger Nano, Ledger Nano S, Ledger OS, Ledger Wallet, [LEDGER] (logo), [L] (logo) are trademarks owned by Ledger SAS.\n\nLedger Developer Portal\n Home Discord\n\nLegal\n Terms and Conditions Ledger&#x27;s privacy policy Cookie statement\n\nLedger Developer Portal Home \n Discord \n \n Legal Terms and Conditions \n Ledger&#x27;s privacy policy \n Cookie statement"
+        }
+      ]
+    },
+    {
+      "id": "eip-712",
+      "title": "EIP-712 Typed Structured Data Hashing and Signing",
+      "url": "https://eips.ethereum.org/EIPS/eip-712",
+      "fetchedAt": "2026-04-04T16:29:27.449Z",
+      "chunks": [
+        {
+          "text": "EIP-712: Typed structured data hashing and signing \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n Ethereum Improvement Proposals\n\nAll Core Networking Interface ERC Meta Informational\n\nAlert \n \n \n \n Source \n \n \n \n Discuss\n\nStandards Track: Interface \n \n \n \n EIP-712: Typed structured data hashing and signing\n\nA procedure for hashing and signing of typed structured data as opposed to just bytestrings.\n\nAuthors \n Remco Bloemen ( @Recmo ), Leonid Logvinov ( @LogvinovLeon ), Jacob Evans ( @dekz )\n\nCreated \n 2017-09-12\n\nRequires\n\nEIP-155 ,\n\nEIP-191\n\nTable of Contents\n\nAbstract\n\nMotivation\n\nSpecification \n \n Definition of typed structured data 𝕊\n\nDefinition of hashStruct"
+        },
+        {
+          "text": "Definition of encodeType\n\nDefinition of encodeData\n\nDefinition of domainSeparator\n\nSpecification of the eth_signTypedData JSON RPC\n\nSpecification of the Web3 API\n\nRationale \n \n Rationale for typeHash\n\nRationale for encodeData\n\nRationale for domainSeparator\n\nBackwards Compatibility\n\nTest Cases\n\nSecurity Considerations \n \n Replay attacks\n\nFrontrunning attacks\n\nCopyright\n\nAbstract\n\nThis is a standard for hashing and signing of typed structured data as opposed to just bytestrings. It includes a\n\ntheoretical framework for correctness of encoding functions,\n\nspecification of structured data similar to and compatible with Solidity structs,\n\nsafe hashing algorithm for instances of those structures,"
+        },
+        {
+          "text": "safe inclusion of those instances in the set of signable messages,\n\nan extensible mechanism for domain separation,\n\nnew RPC call eth_signTypedData , and\n\nan optimized implementation of the hashing algorithm in EVM.\n\nIt does not include replay protection.\n\nMotivation\n\nSigning data is a solved problem if all we care about are bytestrings. Unfortunately in the real world we care about complex meaningful messages. Hashing structured data is non-trivial and errors result in loss of the security properties of the system.\n\nAs such, the adage “don’t roll your own crypto” applies. Instead, a peer-reviewed well-tested standard method needs to be used. This EIP aims to be that standard."
+        },
+        {
+          "text": "This EIP aims to improve the usability of off-chain message signing for use on-chain. We are seeing growing adoption of off-chain message signing as it saves gas and reduces the number of transactions on the blockchain. Currently signed messages are an opaque hex string displayed to the user with little context about the items that make up the message.\n\nHere we outline a scheme to encode data along with its structure which allows it to be displayed to the user for verification when signing. Below is an example of what a user could be shown when signing a message according to the present proposal.\n\nSpecification"
+        },
+        {
+          "text": "The set of signable messages is extended from transactions and bytestrings 𝕋 ∪ 𝔹⁸ⁿ to also include structured data 𝕊 . The new set of signable messages is thus 𝕋 ∪ 𝔹⁸ⁿ ∪ 𝕊 . They are encoded to bytestrings suitable for hashing and signing as follows:\n\nencode(transaction : 𝕋) = RLP_encode(transaction)\n\nencode(message : 𝔹⁸ⁿ) = \"\\x19Ethereum Signed Message:\\n\" ‖ len(message) ‖ message where len(message) is the non-zero-padded ascii-decimal encoding of the number of bytes in message .\n\nencode(domainSeparator : 𝔹²⁵⁶, message : 𝕊) = \"\\x19\\x01\" ‖ domainSeparator ‖ hashStruct(message) where domainSeparator and hashStruct(message) are defined below."
+        },
+        {
+          "text": "This encoding is deterministic because the individual components are. The encoding is injective because the three cases always differ in first byte. ( RLP_encode(transaction) does not start with \\x19 .)\n\nThe encoding is compliant with ERC-191 . The ‘version byte’ is fixed to 0x01 , the ‘version specific data’ is the 32-byte domain separator domainSeparator and the ‘data to sign’ is the 32-byte hashStruct(message) .\n\nDefinition of typed structured data 𝕊"
+        },
+        {
+          "text": "To define the set of all structured data, we start with defining acceptable types. Like ABIv2 these are closely related to Solidity types. It is illustrative to adopt Solidity notation to explain the definitions. The standard is specific to the Ethereum Virtual Machine, but aims to be agnostic to higher level languages. Example:\n\nstruct Mail {\n address from;\n address to;\n string contents;\n}\n\nDefinition : A struct type has valid identifier as name and contains zero or more member variables. Member variables have a member type and a name.\n\nDefinition : A member type can be either an atomic type, a dynamic type or a reference type."
+        },
+        {
+          "text": "Definition : The atomic types are bytes1 to bytes32 , uint8 to uint256 , int8 to int256 , bool and address . These correspond to their definition in Solidity. Note that there are no aliases uint and int . Note that contract addresses are always plain address . Fixed point numbers are not supported by the standard. Future versions of this standard may add new atomic types.\n\nDefinition : The dynamic types are bytes and string . These are like the atomic types for the purpose of type declaration, but their treatment in encoding is different."
+        },
+        {
+          "text": "Definition : The reference types are arrays and structs. Arrays are either fixed size or dynamic and denoted by Type[n] or Type[] respectively. Structs are references to other structs by their name. The standard supports recursive struct types.\n\nDefinition : The set of structured typed data 𝕊 contains all the instances of all the struct types.\n\nDefinition of hashStruct\n\nThe hashStruct function is defined as\n\nhashStruct(s : 𝕊) = keccak256(typeHash ‖ encodeData(s)) where typeHash = keccak256(encodeType(typeOf(s)))\n\nNote : The typeHash is a constant for a given struct type and does not need to be runtime computed.\n\nDefinition of encodeType"
+        },
+        {
+          "text": "The type of a struct is encoded as name ‖ \"(\" ‖ member₁ ‖ \",\" ‖ member₂ ‖ \",\" ‖ … ‖ memberₙ \")\" where each member is written as type ‖ \" \" ‖ name . For example, the above Mail struct is encoded as Mail(address from,address to,string contents) .\n\nIf the struct type references other struct types (and these in turn reference even more struct types), then the set of referenced struct types is collected, sorted by name and appended to the encoding. An example encoding is Transaction(Person from,Person to,Asset tx)Asset(address token,uint256 amount)Person(address wallet,string name) .\n\nDefinition of encodeData"
+        },
+        {
+          "text": "The encoding of a struct instance is enc(value₁) ‖ enc(value₂) ‖ … ‖ enc(valueₙ) , i.e. the concatenation of the encoded member values in the order that they appear in the type. Each encoded member value is exactly 32-byte long.\n\nThe atomic values are encoded as follows: Boolean false and true are encoded as uint256 values 0 and 1 respectively. Addresses are encoded as uint160 . Integer values are sign-extended to 256-bit and encoded in big endian order. bytes1 to bytes31 are arrays with a beginning (index 0 ) and an end (index length - 1 ), they are zero-padded at the end to bytes32 and encoded in beginning to end order. This corresponds to their encoding in ABI v1 and v2."
+        },
+        {
+          "text": "The dynamic values bytes and string are encoded as a keccak256 hash of their contents.\n\nThe array values are encoded as the keccak256 hash of the concatenated encodeData of their contents (i.e. the encoding of SomeType[5] is identical to that of a struct containing five members of type SomeType ).\n\nThe struct values are encoded recursively as hashStruct(value) . This is undefined for cyclical data.\n\nDefinition of domainSeparator\n\ndomainSeparator = hashStruct(eip712Domain)"
+        },
+        {
+          "text": "where the type of eip712Domain is a struct named EIP712Domain with one or more of the below fields. Protocol designers only need to include the fields that make sense for their signing domain. Unused fields are left out of the struct type.\n\nstring name the user readable name of signing domain, i.e. the name of the DApp or the protocol.\n\nstring version the current major version of the signing domain. Signatures from different versions are not compatible.\n\nuint256 chainId the EIP-155 chain id. The user-agent should refuse signing if it does not match the currently active chain."
+        },
+        {
+          "text": "address verifyingContract the address of the contract that will verify the signature. The user-agent may do contract specific phishing prevention.\n\nbytes32 salt a disambiguating salt for the protocol. This can be used as a domain separator of last resort.\n\nFuture extensions to this standard can add new fields with new user-agent behaviour constraints. User-agents are free to use the provided information to inform/warn users or refuse signing. Dapp implementers should not add private fields, new fields should be proposed through the EIP process."
+        },
+        {
+          "text": "The EIP712Domain fields should be the order as above, skipping any absent fields. Future field additions must be in alphabetical order and come after the above fields. User-agents should accept fields in any order as specified by the EIP712Domain type.\n\nSpecification of the eth_signTypedData JSON RPC\n\nThe method eth_signTypedData is added to the Ethereum JSON-RPC. The method parallels eth_sign .\n\neth_signTypedData\n\nThe sign method calculates an Ethereum specific signature with: sign(keccak256(\"\\x19\\x01\" ‖ domainSeparator ‖ hashStruct(message))) , as defined above.\n\nNote : the address to sign with must be unlocked.\n\nParameters"
+        },
+        {
+          "text": "Address - 20 Bytes - Address of the account that will sign the messages.\n\nTypedData - Typed structured data to be signed.\n\nTyped data is a JSON object containing type information, domain separator parameters and the message object. Below is the json-schema definition for TypedData param."
+        },
+        {
+          "text": "{\n type: 'object',\n properties: {\n types: {\n type: 'object',\n properties: {\n EIP712Domain: {type: 'array'},\n },\n additionalProperties: {\n type: 'array',\n items: {\n type: 'object',\n properties: {\n name: {type: 'string'},\n type: {type: 'string'}\n },\n required: ['name', 'type']\n }\n },\n required: ['EIP712Domain']\n },\n primaryType: {type: 'string'},\n domain: {type: 'object'},\n message: {type: 'object'}\n },\n required: ['types', 'primaryType', 'domain', 'message']\n}\n \n \n \n \n \n Returns"
+        },
+        {
+          "text": "DATA : Signature. As in eth_sign it is a hex encoded 65 byte array starting with 0x . It encodes the r , s and v parameters from appendix F of the yellow paper in big-endian format. Bytes 0…32 contain the r parameter, bytes 32…64 the s parameter and the last byte the v parameter. Note that the v parameter includes the chain id as specified in EIP-155 .\n\nExample\n\nRequest:"
+        },
+        {
+          "text": "curl -X POST --data '{\"jsonrpc\":\"2.0\",\"method\":\"eth_signTypedData\",\"params\":[\"0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826\", {\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"Person\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"wallet\",\"type\":\"address\"}],\"Mail\":[{\"name\":\"from\",\"type\":\"Person\"},{\"name\":\"to\",\"type\":\"Person\"},{\"name\":\"contents\",\"type\":\"string\"}]},\"primaryType\":\"Mail\",\"domain\":{\"name\":\"Ether Mail\",\"version\":\"1\",\"chainId\":1,\"verifyingContract\":\"0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC\"},\"message\":{\"from\":{\"name\":\"Cow\",\"wallet\":\"0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826\"},\"to\":{\"name\":\"Bob\",\"wallet\":\"0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB\"},\"contents\":\"Hello, Bob!\"}}],\"id\":1}'"
+        },
+        {
+          "text": "Result:\n\n{\n \"id\":1,\n \"jsonrpc\": \"2.0\",\n \"result\": \"0x4355c47d63924e8a72e509b65029052eb6c299d53a04e167c5775fd466751c9d07299936d304c153f6443dfa05f40ff007d72911b6f72307f996231605b915621c\"\n}\n\nAn example how to use Solidity ecrecover to verify the signature calculated with eth_signTypedData can be found in the Example.js . The contract is deployed on the testnet Ropsten and Rinkeby.\n\npersonal_signTypedData\n\nThere also should be a corresponding personal_signTypedData method which accepts the password for an account as the last argument.\n\nSpecification of the Web3 API\n\nTwo methods are added to Web3.js version 1 that parallel the web3.eth.sign and web3.eth.personal.sign methods."
+        }
+      ]
+    },
+    {
+      "id": "eip-7730",
+      "title": "EIP-7730",
+      "url": "https://eips.ethereum.org/EIPS/eip-7730",
+      "fetchedAt": "2026-04-04T16:29:27.597Z",
+      "chunks": [
+        {
+          "text": "ERC-7730: Structured Data Clear Signing Format \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n Ethereum Improvement Proposals\n\nAll Core Networking Interface ERC Meta Informational\n\nAlert \n \n \n \n Source \n \n \n \n Discuss\n\n⚠️ Draft \n \n \n \n Standards Track: ERC \n \n \n \n ERC-7730: Structured Data Clear Signing Format\n\nJSON format describing how to clear-sign smart contract calls and typed messages.\n\nAuthors \n Laurent Castillo ( @lcastillo-ledger ), Derek Rein ( @arein ), Pierre Aoun ( @paoun-ledger ), Arik Galansky ( @arikg ), Bartosz Rozwarski ( @llbartekll ), Kaan Uzdogan ( @kuzdogan ), Fredrik ( @Fredrik0x )\n\nCreated \n 2024-02-07"
+        },
+        {
+          "text": "Discussion Link \n https://ethereum-magicians.org/t/eip-7730-proposal-for-a-clear-signing-standard-format-for-wallets/20403\n\nRequires\n\nEIP-155 ,\n\nEIP-712\n\nTable of Contents\n\nAbstract\n\nMotivation\n\nSpecification \n \n Simple example\n\nVersioning\n\nCommon concepts\n\nContext section\n\nMetadata section\n\nDisplay section\n\nReference\n\nContainer structure values\n\nField formats\n\nEncryption schemes\n\nRationale \n \n Human readability\n\nWallet limitations\n\nInternationalization\n\nUser Operations (EIP-4337)\n\nBatch transactions (EIP-5792)\n\nExtensibility to other structured data formats\n\nCommon keywords\n\nTest Cases\n\nSecurity Considerations \n \n Binding context\n\nRegistry poisoning\n\nExternal data resolution\n\nProxy support"
+        },
+        {
+          "text": "Interpolated intent security\n\nEncryption support\n\nFuture work\n\nCopyright\n\nAbstract\n\nThis specification defines a JSON format carrying additional information required to correctly display structured data for human verification on wallet screens or for machine consumption e.g. by transaction simulation engines."
+        },
+        {
+          "text": "The ERC-7730 specification enriches type data contained in the ABIs and schemas of structured messages (structures like the calldata of an EVM transaction, an EIP-712 message or an EIP-4337 User Operation) with additional formatting information and dynamic value interpolation, enabling both human-readable display with contextual intent descriptions and machine-interpretable data processing. For instance, a solidity field containing an amount, encoded as an uint256, can be converted to the right magnitude and appended with the correct ticker for display, or parsed programmatically for transaction simulation. Fields containing encrypted values (such as FHE-encrypted amounts in confidential token standards like ERC-7984 ) can also be annotated with decryption context, enabling wallets to either decrypt and display the plaintext value or present a meaningful fallback."
+        },
+        {
+          "text": "Wallets and automated systems will use curated ERC-7730 files alongside the raw data to sign in order to construct appropriate interfaces for their respective use cases.\n\nThis enables significantly improved signing user experiences and lower end-user risk from frontend and phishing attacks.\n\nMotivation"
+        },
+        {
+          "text": "Properly validating a transaction on a hardware wallet’s screen (also known as Clear Signing) is a key element of good security practices for end users when interacting with any Blockchain. Unfortunately, most data to sign, even enriched with the data structure description (like ABIs or EIP-712 types) are not self-sufficient in terms of correctly displaying them to users for review. Among other things:\n\nFunction name or main message type is often a developer oriented name and does not translate to a clear intent for the user"
+        },
+        {
+          "text": "Fields in the data to sign are tied to primitive types only, but those can be displayed in many different ways. For instance, integers can be displayed as percentages, dates, etc…\n\nSome fields require additional metadata to be displayed correctly, for instance token amounts require knowledge of the decimals and the ticker, as well as where to find the token address itself to be correctly formatted.\n\nSome values can be encrypted, such as encrypted amounts in confidential tokens following ERC-7984 . These values cannot be directly interpreted, so additional context must be provided to enable wallets to decrypt and display them for users."
+        },
+        {
+          "text": "This specification intends to provide a simple, open standard format to provide wallets with the additional information required to properly format a structured data to sign for review by users.\n\nProviding this additional formatting information requires deep knowledge of the way a smart contract or message is going to be used. It is expected that app developers will be the best placed to write such a file. The intent of an open standard is to only write this file once and have it work with most wallets supporting this standard.\n\nSpecification"
+        },
+        {
+          "text": "The keywords “MUST”, “MUST NOT”, “REQUIRED”, “SHALL”, “SHALL NOT”, “SHOULD”, “SHOULD NOT”, “RECOMMENDED”, “NOT RECOMMENDED”, “MAY”, and “OPTIONAL” in this document are to be interpreted as described in RFC 2119 and RFC 8174.\n\nSimple example\n\nThe following is an example of how to clear sign a transfer function call on an ERC-20 contract.\n\n{ \n \"$schema\" : \"https://eips.ethereum.org/assets/eip-7730/erc7730-v2.schema.json\" ,"
+        },
+        {
+          "text": "\"context\" : { \n \"$id\" : \"Example ERC-20\" , \n \"contract\" : { \n \"deployments\" : [ \n { \n \"chainId\" : 1 , \n \"address\" : \"0xdAC17F958D2ee523a2206206994597C13D831ec7\" \n }, \n { \n \"chainId\" : 137 , \n \"address\" : \"0xc2132D05D31c914a87C6611C10748AEb04B58e8F\" \n }, \n { \n \"chainId\" : 42161 , \n \"address\" : \"0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9\" \n } \n ] \n } \n },\n\n\"metadata\" : { \n \"owner\" : \"Example\" , \n \"contractName\" : \"Example Token\" , \n \"info\" : { \n \"url\" : \"https://example.io/\" , \n \"deploymentDate\" : \"2017-11-28T12:41:21Z\" \n } \n },"
+        },
+        {
+          "text": "\"display\" : { \n \"formats\" : { \n \"transfer(address to,uint256 value)\" : { \n \"intent\" : \"Send\" , \n \"interpolatedIntent\" : \"Send {value} to {to}\" , \n \"fields\" : [ \n { \n \"path\" : \"value\" , \n \"label\" : \"Amount\" , \n \"format\" : \"tokenAmount\" , \n \"params\" : { \n \"tokenPath\" : \"@.to\" \n } \n }, \n { \n \"path\" : \"to\" , \n \"label\" : \"To\" , \n \"format\" : \"addressName\" \n } \n ] \n } \n } \n } \n }\n\nThe $schema key refers to the latest version of this specification json schema (version 1 at the time of writing)."
+        },
+        {
+          "text": "The context key is used to provide binding context information for this file. It can be seen as a set of constraints on the structured data being reviewed, indicating whether the ERC-7730 file is valid for this data. A wallet MUST ensure these constraints are met before ERC-7730 formatting information is applied to the data being signed.\n\nIn this example, the context section indicates that the ERC-7730 file should only be applied to the Example smart contract whose deployment addresses are provided. Once the contract is matched, wallets use the display.formats entry itself to derive the function selector, parameter layout, and user-facing labels."
+        },
+        {
+          "text": "The metadata section contains constants that can be trusted when the ERC-7730 file is applicable for the given context. This section is typically used to:\n\nProvide displayable information about the recipient of the contract call / message\n\nProvide displayable values of enumeration or encoded id parameters, typically smart contract / message specific\n\nProvide common constants used by the various formats defined in the file"
+        },
+        {
+          "text": "In this example, the metadata section contains only the recipient information, in the form of a displayable name ( owner key), contract displayable name ( contractName key) and additional information ( info key) that MAY be used by wallets to provide details about the recipient.\n\nFinally, the display section contains the definitions of how to format each field of targeted contract calls under the formats key."
+        },
+        {
+          "text": "In this example, the function being described is identified by its human-readable ABI fragment transfer(address to,uint256 value) . Wallets strip the parameter names to compute the type-only signature transfer(address,uint256) , hash it, and match the resulting selector 0xa9059cbb against the calldata.\n\nThe intent key contains a human-readable string that wallets SHOULD display to explain to the user the intent of the function call.\n\nThe fields key contains all the parameters formatting information\n\nThe interpolatedIntent key is a suggested short string representation of intent and fields that wallet CAN use instead of having a dedicated layout."
+        },
+        {
+          "text": "In this example, the to parameter and the value parameter SHOULD both be displayed, one as an address replaceable by a trusted name (ENS or others), the other as an amount formatted using metadata of the target ERC-20 contract.\n\nVersioning\n\nThe version of the specification used by the 7730 file is specified by linking to the reference schema file under the $schema key.\n\nThe current version of the specification is 2 at the time of writing. The reference schema for version 2 is here .\n\nCommon concepts\n\nKey naming convention"
+        },
+        {
+          "text": "In all the specification, key names starting with $ are internal and have no value beyond readability of the specification file itself. They should not be used in any function to build the UI to review structured data.\n\nStructured data\n\nThis specification intends to be extensible to describe the display formatting of any kind of structured data .\n\nBy Structured data , we target any data format that has:\n\nA well-defined type system; the data being described itself being of a specific top-level type\n\nA description of the type system, the schema , that should allow splitting the data into fields , each field clearly identified with a path that can be described as a string."
+        },
+        {
+          "text": "Displaying structured data is often done by wallets to review its content before authorizing an action in the form of a signature over some serialization of the structured data. As such, the structured data is contained in a container structure :\n\nContainer structure has a well-defined signature scheme (a serialization scheme, a hashing scheme, and signature algorithm).\n\nThe container structure does not necessarily follow the same type system as the structured data.\n\nWallets receive the full container structure and uses the signature scheme to generate a signature on the overall structure.\n\nCurrent specification covers EVM smart contract calldata:\n\nDefined in Solidity"
+        },
+        {
+          "text": "The schema is the function ABI (derived from the matched display.formats function fragment)\n\nThe container structure is an EVM Transaction serialized in RLP encoding\n\nIt also supports EIP-712 messages\n\nDefined in EIP-712\n\nThe schema is extracted from the type string representation carried in the display.formats message fragments.\n\nAn EIP-712 message is self-contained, the signature is applied to the hashed message itself following EIP-712 specification."
+        },
+        {
+          "text": "The schema is defined by the binding context together with the selected display entry. For contracts, the matched display.formats key provides the full function signature (types and parameter names); for EIP-712 messages, the matched display.formats provides the type encoding of the message. Both form of type definition allows defining unique paths pointing to specific fields in the data.\n\nFormats are dependent on and defined for the underlying types on the structured data. The Reference section covers formats and types supported by this current version of the specification."
+        }
+      ]
+    }
+  ]
+}

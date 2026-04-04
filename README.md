@@ -28,6 +28,7 @@ x402Bench provides one integrated readiness benchmark and scorecard.
 - Integrated LLM readiness runner (policy quality + real workflow execution in one score)
 - Runtime abstraction: local Ollama or OpenAI-compatible APIs (including Hugging Face Router)
 - Hard readiness suite with adversarial/policy-edge cases to avoid inflated 100% scores
+- Documentation-grounded evaluation with user-selectable official source packs and citation scoring
 
 ## Standards and Best-Practice Alignment
 
@@ -109,11 +110,18 @@ npm run dev
 - `npm test`: unit tests
 - `npm run api:dev`: run FastAPI backend on port 8000
 - `npm run ui:dev`: run Next.js frontend on port 3000
+- `npm run docs:build`: fetch official docs and build `readiness_bench/docs_cache/default_docs_pack.json`
 - `npm run llm:bench`: run real Ollama LLM benchmark on `gemma4:e4b`
 - `npm run readiness:bench`: run hard readiness benchmark across 4 local models
 - `npm run readiness:bench:hf`: run the same benchmark against OpenAI-compatible hosted models (HF Router example)
 
 ## Integrated readiness benchmark
+
+Refresh the documentation pack from official sources:
+
+```bash
+npm run docs:build
+```
 
 Use local Ollama models and real workflow integrations in one run:
 
@@ -126,6 +134,20 @@ Use OpenAI-compatible hosted models (Hugging Face Router, OpenRouter, or self-ho
 ```bash
 export HF_TOKEN=hf_xxx
 npm run readiness:bench:hf
+```
+
+You can override docs behavior directly:
+
+```bash
+node scripts/run_llm_readiness_benchmark.mjs \
+  --config config/benchmark.config.json \
+  --suite readiness_bench/suite.json \
+  --runtime ollama \
+  --models qwen3:4b-instruct,phi4:14b \
+  --docs-pack readiness_bench/docs_cache/default_docs_pack.json \
+  --docs-top-k 6 \
+  --require-citations true \
+  --outdir readiness_bench/results
 ```
 
 Outputs are written to `readiness_bench/results/*.json` and `readiness_bench/results/*.md`.

@@ -22,6 +22,7 @@ LLM_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_ollama_llm_benchmark.mjs"
 READINESS_RESULTS_DIR = PROJECT_ROOT / "readiness_bench" / "results"
 READINESS_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_llm_readiness_benchmark.mjs"
 READINESS_SUITE_PATH = PROJECT_ROOT / "readiness_bench" / "suite.json"
+READINESS_DEFAULT_DOCS_PACK_PATH = PROJECT_ROOT / "readiness_bench" / "docs_cache" / "default_docs_pack.json"
 
 MODEL_NAME_REGEX = re.compile(r"^[A-Za-z0-9._:/-]+$")
 ENV_NAME_REGEX = re.compile(r"^[A-Z_][A-Z0-9_]*$")
@@ -161,6 +162,9 @@ class ReadinessRunRequest(BaseModel):
     runtime: str = Field(default="ollama")
     apiBaseUrl: str | None = Field(default=None, max_length=1024)
     apiKeyEnv: str = Field(default="OPENAI_API_KEY", max_length=64)
+    docsPackPath: str | None = Field(default=None, max_length=2048)
+    docsTopK: int = Field(default=5, ge=1, le=12)
+    requireCitations: bool = Field(default=True)
     runsPerScenario: int = Field(default=1, ge=1, le=3)
     maxTokens: int = Field(default=512, ge=64, le=4096)
     temperature: float = Field(default=0.1, ge=0, le=1)
@@ -537,14 +541,17 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
     readiness_suite = _load_readiness_suite()
     cases = readiness_suite.get("cases", []) if isinstance(readiness_suite.get("cases"), list) else []
     meta = report.get("meta", {}) if isinstance(report, dict) and isinstance(report.get("meta"), dict) else {}
+    docs_meta = meta.get("docs", {}) if isinstance(meta.get("docs"), dict) else {}
     integration_status = _integration_status(config)
     runtime_used = str(meta.get("runtime") or "ollama")
+    default_docs_available = READINESS_DEFAULT_DOCS_PACK_PATH.exists()
 
     return {
         "name": "LLM readiness for payment workflows",
         "whatIsBenchmarked": (
             "How accurately a model makes payment-policy decisions (allow/block, approval gate, risk level, and required controls), "
-            "plus whether eligible scenarios complete real execution across Chainlink orchestration, Hedera settlement, and Ledger checks."
+            "plus whether eligible scenarios complete real execution across Chainlink orchestration, Hedera settlement, and Ledger checks, "
+            "grounded against selected official documentation sources."
         ),
         "mocked": False,
         "suiteName": readiness_suite.get("name", "x402Bench Readiness Suite"),
@@ -553,6 +560,16 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
         "scenarioCount": len(cases),
         "runtimeUsed": runtime_used,
         "supportedRuntimes": ["ollama", "openai_compat"],
+        "docs": {
+            "defaultPackAvailable": default_docs_available,
+            "defaultPackPath": str(READINESS_DEFAULT_DOCS_PACK_PATH) if default_docs_available else None,
+            "enabled": bool(docs_meta.get("enabled", default_docs_available)),
+            "name": docs_meta.get("name"),
+            "version": docs_meta.get("version"),
+            "sourceCount": docs_meta.get("sourceCount", 0),
+            "topK": docs_meta.get("topK", 0),
+            "requireCitations": docs_meta.get("requireCitations", True),
+        },
         "integrationStatus": integration_status,
         "statusNote": (
             "Local integration fallbacks are auto-wired for API-triggered runs. "
@@ -590,6 +607,7 @@ def _scenario_templates() -> list[dict[str, Any]]:
                     "riskLevel": str(expected.get("riskLevel") or ""),
                     "requiredControls": expected.get("requiredControls", []),
                 },
+                "requiredSources": case.get("requiredSources", []),
             }
         )
     return templates
@@ -644,11 +662,13 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
                     "priority": llm.get("priority"),
                     "riskLevel": llm.get("riskLevel"),
                     "requiredControls": llm.get("requiredControls", []),
+                    "citations": llm.get("citations", []),
                     "reason": llm.get("reason"),
                     "latencyMs": llm.get("latencyMs", 0),
                     "error": llm.get("error"),
                     "rawOutputPreview": (str(llm.get("rawOutput", ""))[:400]).strip(),
                 },
+                "docs": item.get("docs", {}),
                 "evaluation": item.get("evaluation", {}),
                 "workflow": item.get("workflow", {}),
                 "totalLatencyMs": item.get("totalLatencyMs", 0),
@@ -674,6 +694,7 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
             "suiteName": meta.get("suiteName", definition.get("suiteName")),
             "suiteVersion": meta.get("suiteVersion", definition.get("suiteVersion")),
             "models": meta.get("models", []),
+            "docs": meta.get("docs", {}),
             "totalEvaluations": summary.get("totalEvaluations", 0),
         },
         "models": model_rows,
@@ -1046,6 +1067,10 @@ def run_readiness_benchmark(
             runtime,
             "--api-key-env",
             api_key_env,
+            "--docs-top-k",
+            str(payload.docsTopK),
+            "--require-citations",
+            str(payload.requireCitations).lower(),
             "--runs-per-scenario",
             str(payload.runsPerScenario),
             "--max-tokens",
@@ -1057,6 +1082,10 @@ def run_readiness_benchmark(
         ]
         if payload.apiBaseUrl and payload.apiBaseUrl.strip():
             command.extend(["--api-base-url", payload.apiBaseUrl.strip()])
+        if payload.docsPackPath and payload.docsPackPath.strip():
+            command.extend(["--docs-pack", payload.docsPackPath.strip()])
+        elif READINESS_DEFAULT_DOCS_PACK_PATH.exists():
+            command.extend(["--docs-pack", str(READINESS_DEFAULT_DOCS_PACK_PATH)])
 
         try:
             process = subprocess.run(

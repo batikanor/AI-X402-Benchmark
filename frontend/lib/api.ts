@@ -109,6 +109,16 @@ export interface ReadinessDashboardResponse {
     scenarioCount: number;
     runtimeUsed: string;
     supportedRuntimes: string[];
+    docs: {
+      defaultPackAvailable: boolean;
+      defaultPackPath: string | null;
+      enabled: boolean;
+      name?: string | null;
+      version?: string | null;
+      sourceCount: number;
+      topK: number;
+      requireCitations: boolean;
+    };
     statusNote: string;
     integrationStatus: {
       isFullyConfigured: boolean;
@@ -130,6 +140,15 @@ export interface ReadinessDashboardResponse {
     suiteName: string;
     suiteVersion: string;
     models: string[];
+    docs: {
+      enabled?: boolean;
+      path?: string | null;
+      name?: string | null;
+      version?: string | null;
+      sourceCount?: number;
+      topK?: number;
+      requireCitations?: boolean;
+    };
     totalEvaluations: number;
   } | null;
   models: Array<{
@@ -140,6 +159,9 @@ export interface ReadinessDashboardResponse {
     controlsF1Pct: number;
     parseRatePct: number;
     fullMatchRatePct: number;
+    docsGroundingRatePct: number;
+    citationValidityPct: number;
+    requiredSourceCoveragePct: number;
     executionEligibilityPct: number;
     workflowSuccessRatePct: number;
     executedScenarios: number;
@@ -172,10 +194,17 @@ export interface ReadinessDashboardResponse {
       priority: string;
       riskLevel: string;
       requiredControls: string[];
+      citations: string[];
       reason: string;
       latencyMs: number;
       error: string | null;
       rawOutputPreview: string;
+    };
+    docs: {
+      enabled: boolean;
+      requiredSources: string[];
+      providedExcerptIds: string[];
+      providedSourceIds: string[];
     };
     evaluation: {
       decisionMatch: boolean;
@@ -185,6 +214,12 @@ export interface ReadinessDashboardResponse {
       fullMatch: boolean;
       basePolicyAccuracyPct: number;
       controlsF1Pct: number;
+      citationCount: number;
+      validCitationCount: number;
+      citationValidityPct: number;
+      requiredSourceCoveragePct: number;
+      requiredSourceHits: string[];
+      docsGrounded: boolean;
       accuracyPct: number;
       executionEligible: boolean;
     };
@@ -214,6 +249,7 @@ export interface ReadinessDashboardResponse {
       riskLevel: string;
       requiredControls: string[];
     };
+    requiredSources: string[];
   }>;
 }
 
@@ -258,6 +294,9 @@ export async function runReadinessBenchmark(input: {
   runtime: "ollama" | "openai_compat";
   apiBaseUrl?: string;
   apiKeyEnv?: string;
+  docsPackPath?: string;
+  docsTopK?: number;
+  requireCitations?: boolean;
   runsPerScenario: number;
   maxTokens: number;
   temperature: number;

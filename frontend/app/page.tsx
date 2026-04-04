@@ -103,6 +103,9 @@ export default function HomePage() {
   const [customModels, setCustomModels] = useState("");
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [apiKeyEnv, setApiKeyEnv] = useState("HF_TOKEN");
+  const [docsPackPath, setDocsPackPath] = useState("");
+  const [docsTopK, setDocsTopK] = useState(5);
+  const [requireCitations, setRequireCitations] = useState(true);
   const [runsPerScenario, setRunsPerScenario] = useState(1);
   const [running, setRunning] = useState(false);
   const [runSummary, setRunSummary] = useState("");
@@ -122,6 +125,16 @@ export default function HomePage() {
     if (runtime !== "openai_compat") return;
     setApiBaseUrl((previous) => previous || HF_OPENAI_COMPAT_URL);
   }, [runtime]);
+
+  useEffect(() => {
+    const docs = data?.track.docs;
+    if (!docs) return;
+    setDocsTopK((previous) => (previous > 0 ? previous : docs.topK || 5));
+    setRequireCitations(docs.requireCitations);
+    if (!docsPackPath && docs.defaultPackPath) {
+      setDocsPackPath(docs.defaultPackPath);
+    }
+  }, [data?.track.docs, docsPackPath]);
 
   const sortedModels = useMemo(() => {
     if (!data?.models.length) return [];
@@ -264,6 +277,9 @@ export default function HomePage() {
         runtime,
         apiBaseUrl: apiBaseUrl.trim() || undefined,
         apiKeyEnv: apiKeyEnv.trim() || undefined,
+        docsPackPath: docsPackPath.trim() || undefined,
+        docsTopK,
+        requireCitations,
         runsPerScenario,
         maxTokens: 512,
         temperature: 0.1,
@@ -278,7 +294,7 @@ export default function HomePage() {
       if (result.ok) {
         if (updated?.latest && topModel) {
           setRunSummary(
-            `Readiness run completed. Leader ${topModel.model} with score ${metricLabel(topModel.overallScore)}. Decision accuracy ${metricLabel(topModel.decisionAccuracyPct, "%")}, workflow success ${metricLabel(topModel.workflowSuccessRatePct, "%")}. Run ID ${updated.latest.runId}.`,
+            `Readiness run completed. Leader ${topModel.model} with score ${metricLabel(topModel.overallScore)}. Decision accuracy ${metricLabel(topModel.decisionAccuracyPct, "%")}, docs grounded ${metricLabel(topModel.docsGroundingRatePct, "%")}, workflow success ${metricLabel(topModel.workflowSuccessRatePct, "%")}. Run ID ${updated.latest.runId}.`,
           );
         } else {
           setRunSummary("Readiness run completed. Dashboard is refreshing.");
@@ -356,6 +372,12 @@ export default function HomePage() {
                 <Badge className="border-white/20 bg-white/5 text-white">Runtime: {data?.latest?.runtime ?? data?.track.runtimeUsed ?? "-"}</Badge>
                 <Badge className="border-white/20 bg-white/5 text-white">
                   Suite: {data?.track.suiteName ?? "-"} v{data?.track.suiteVersion ?? "-"}
+                </Badge>
+                <Badge className="border-white/20 bg-white/5 text-white">
+                  Docs grounding: {data?.track.docs?.enabled ? "On" : "Off"}
+                </Badge>
+                <Badge className="border-white/20 bg-white/5 text-white">
+                  Docs sources: {data?.latest?.docs?.sourceCount ?? data?.track.docs?.sourceCount ?? 0}
                 </Badge>
                 <Badge className="border-white/20 bg-white/5 text-white">
                   Integrations ready: {data?.track.integrationStatus?.isFullyConfigured ? "Yes" : "Partial"}
@@ -464,6 +486,51 @@ export default function HomePage() {
                   </p>
                 </Card>
               ) : null}
+
+              <Card className="space-y-3 bg-soft/50 p-4">
+                <p className="text-sm font-medium">Documentation grounding</p>
+                <div className="space-y-1">
+                  <label htmlFor="docs-pack-path" className="text-sm font-medium">
+                    Docs pack path (JSON)
+                  </label>
+                  <input
+                    id="docs-pack-path"
+                    value={docsPackPath}
+                    onChange={(event) => setDocsPackPath(event.target.value)}
+                    placeholder={data?.track.docs?.defaultPackPath ?? "readiness_bench/docs_cache/default_docs_pack.json"}
+                    className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="docs-top-k" className="text-sm font-medium">
+                    Retrieved excerpts per case
+                  </label>
+                  <select
+                    id="docs-top-k"
+                    value={docsTopK}
+                    onChange={(event) => setDocsTopK(Number(event.target.value))}
+                    className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                  >
+                    {[3, 4, 5, 6, 8, 10, 12].map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={requireCitations}
+                    onChange={(event) => setRequireCitations(event.target.checked)}
+                    className="h-4 w-4 accent-cyan-400"
+                  />
+                  Require citation coverage for passing
+                </label>
+                <p className="text-xs text-slate-400">
+                  Use <code>scripts/build_docs_pack.mjs</code> with <code>readiness_bench/docs_sources/default_sources.json</code> to refresh from official docs.
+                </p>
+              </Card>
             </div>
 
             <Card className="space-y-3 bg-soft/50 p-4">
@@ -529,6 +596,9 @@ export default function HomePage() {
                     <th className="px-2 py-2">Controls F1 %</th>
                     <th className="px-2 py-2">Parse Rate %</th>
                     <th className="px-2 py-2">Full Match %</th>
+                    <th className="px-2 py-2">Docs Grounded %</th>
+                    <th className="px-2 py-2">Source Coverage %</th>
+                    <th className="px-2 py-2">Citation Validity %</th>
                     <th className="px-2 py-2">Workflow Success %</th>
                     <th className="px-2 py-2">Execution Eligibility %</th>
                     <th className="px-2 py-2">Avg Latency (ms)</th>
@@ -544,6 +614,9 @@ export default function HomePage() {
                       <td className="px-2 py-2">{metricLabel(row.controlsF1Pct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.parseRatePct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.fullMatchRatePct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.docsGroundingRatePct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.requiredSourceCoveragePct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.citationValidityPct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.workflowSuccessRatePct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.executionEligibilityPct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.avgTotalLatencyMs)}</td>
@@ -551,7 +624,7 @@ export default function HomePage() {
                   ))}
                   {!sortedModels.length && !isLoading ? (
                     <tr>
-                      <td className="px-2 py-3 text-slate-400" colSpan={10}>
+                      <td className="px-2 py-3 text-slate-400" colSpan={13}>
                         No readiness benchmark results yet.
                       </td>
                     </tr>
@@ -572,6 +645,9 @@ export default function HomePage() {
                   <p className="mt-1 text-xs text-slate-500">
                     Controls: {(row.scenario.expected.requiredControls ?? []).join(", ") || "none"} | Mode: {row.scenario.executionMode}
                   </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Required docs: {(row.scenario.requiredSources ?? []).join(", ") || "none"}
+                  </p>
                   <div className="mt-3 overflow-x-auto">
                     <table className="min-w-full text-left text-xs">
                       <thead className="text-slate-300">
@@ -579,6 +655,8 @@ export default function HomePage() {
                           <th className="px-2 py-2">Model</th>
                           <th className="px-2 py-2">Decision</th>
                           <th className="px-2 py-2">Accuracy %</th>
+                          <th className="px-2 py-2">Docs grounded</th>
+                          <th className="px-2 py-2">Citations</th>
                           <th className="px-2 py-2">Workflow status</th>
                           <th className="px-2 py-2">Top note</th>
                         </tr>
@@ -593,6 +671,10 @@ export default function HomePage() {
                                 : "-"}
                             </td>
                             <td className="px-2 py-2">{entry.latest ? metricLabel(entry.latest.evaluation.accuracyPct) : "-"}</td>
+                            <td className="px-2 py-2">{entry.latest ? (entry.latest.evaluation.docsGrounded ? "yes" : "no") : "-"}</td>
+                            <td className="px-2 py-2 text-slate-300">
+                              {entry.latest ? (entry.latest.llm.citations?.join(", ") || "-") : "-"}
+                            </td>
                             <td className="px-2 py-2 uppercase">{entry.latest ? normalizeWorkflowStatus(entry.latest.workflow.status) : "-"}</td>
                             <td className="px-2 py-2 text-slate-300">
                               {entry.latest ? rowTopIssue(entry.latest.workflow.notes) : "-"}

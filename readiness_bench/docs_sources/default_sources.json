@@ -1,0 +1,46 @@
+{
+  "name": "x402Bench Official Sponsor Docs",
+  "version": "2026-04-04",
+  "sources": [
+    {
+      "id": "hedera-transaction-id",
+      "title": "Hedera TransactionId",
+      "url": "https://docs.hedera.com/hedera/sdks-and-apis/hedera-api/basic-types/transactionid"
+    },
+    {
+      "id": "hedera-mirror-nodes",
+      "title": "Hedera Mirror Nodes",
+      "url": "https://docs.hedera.com/hedera/core-concepts/mirror-nodes"
+    },
+    {
+      "id": "chainlink-data-feeds-responsibilities",
+      "title": "Chainlink Data Feeds Developer Responsibilities",
+      "url": "https://docs.chain.link/data-feeds/developer-responsibilities"
+    },
+    {
+      "id": "chainlink-automation-best-practice",
+      "title": "Chainlink Automation Best Practice",
+      "url": "https://docs.chain.link/chainlink-automation/concepts/best-practice"
+    },
+    {
+      "id": "ledger-clear-signing-dapps",
+      "title": "Ledger Clear Signing for dApps",
+      "url": "https://developers.ledger.com/docs/clear-signing/for-dapps/get-started"
+    },
+    {
+      "id": "ledger-clear-signing-wallets",
+      "title": "Ledger Clear Signing for Wallets",
+      "url": "https://developers.ledger.com/docs/clear-signing/for-wallets"
+    },
+    {
+      "id": "eip-712",
+      "title": "EIP-712 Typed Structured Data Hashing and Signing",
+      "url": "https://eips.ethereum.org/EIPS/eip-712"
+    },
+    {
+      "id": "eip-7730",
+      "title": "EIP-7730",
+      "url": "https://eips.ethereum.org/EIPS/eip-7730"
+    }
+  ]
+}
