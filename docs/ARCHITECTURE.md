@@ -1,51 +1,65 @@
 # Architecture: x402Bench Agentic Payments Benchmark
 
-## Goal
+## Outcome
 
-Benchmark reliability, latency, safety, and resilience of agentic pay-per-request flows where payment execution, orchestration, and policy approval are all first-class dimensions.
+x402Bench is a benchmark control plane for agentic payments. It scores whether a payment workflow is reliable, low-latency, policy-safe, and resilient under retries.
 
-## Core Pipeline
+## System Pipeline
 
-1. **Policy Gate (Ledger layer)**
-- Evaluate policy (`amount`, destination, sanctions list, threshold).
-- Trigger approval flow if threshold exceeds policy.
-- Block scenario when policy disallows execution.
+1. Policy gate (Ledger track)
+- Evaluates amount, destination, sanctions flags, and approval thresholds.
+- Produces an explicit pass/block/approval-required outcome.
 
-2. **Orchestration (Chainlink CRE layer)**
-- Run workflow simulation/deployment through:
-  - `cli` mode (CRE CLI), or
-  - `webhook` mode (custom CRE workflow endpoint).
+2. Orchestration (Chainlink track)
+- Executes workflow simulation or trigger path via `cli` or `webhook` mode.
+- Emits orchestration latency and failure telemetry.
 
-3. **Settlement (Hedera layer)**
-- Execute payment through:
-  - `sdk` mode (`@hashgraph/sdk`) using operator credentials, or
-  - `relay` mode (custody/relayer endpoint).
+3. Settlement (Hedera track)
+- Executes transfer through `sdk` (live) or `relay` (managed) mode.
+- Persists settlement timing and outcome.
 
-4. **Service Probe (x402 endpoint layer)**
-- Verify downstream service invocation after payment/workflow path.
-- Record service probe success/failure and timing.
+4. Service probe (x402 track)
+- Confirms downstream paid endpoint access and response correctness.
 
-## Scoring
+## Scoring Contract
 
-- Reliability: ratio of successful scenarios.
-- Latency: p95 total latency transformed into bounded score.
-- Safety: policy blocks/failures penalize score.
-- Resilience: retries and failure-rate penalties.
+- Reliability: successful scenarios / total scenarios.
+- Latency: p95 end-to-end latency transformed to bounded score.
+- Safety: policy and approval correctness penalties.
+- Resilience: retry and failure-rate penalty curve.
 
-Overall score:
-- `40% Reliability`
-- `20% Latency`
-- `25% Safety`
-- `15% Resilience`
+Overall score weights:
+- Reliability: 40%
+- Latency: 20%
+- Safety: 25%
+- Resilience: 15%
 
-## Output Artifacts
+## Backend Reliability Controls
 
-- JSON report: machine-readable benchmark evidence.
-- Markdown report: judge-facing summary and scorecard.
+- Serialized run execution with global run mutex.
+- `Idempotency-Key` support for duplicate-safe POST retries.
+- Bounded subprocess timeout (`BENCH_RUN_TIMEOUT_SECONDS`, clamped 30-1800s).
+- Structured JSON/Markdown artifacts for auditable judging evidence.
 
-## Trust Boundary
+## Protocol and Standards Alignment
 
-- Ledger policy layer controls risk escalation.
-- Chainlink layer controls orchestration evidence.
-- Hedera layer controls settlement evidence.
+- Hedera transaction and settlement semantics:
+  - https://docs.hedera.com/hedera/sdks-and-apis/hedera-api/basic-types/transactionid
+  - https://docs.hedera.com/hedera/core-concepts/mirror-nodes
+- Chainlink operational guidance:
+  - https://docs.chain.link/data-feeds/developer-responsibilities
+  - https://docs.chain.link/chainlink-automation/concepts/best-practice
+- Ledger clear-signing guidance:
+  - https://developers.ledger.com/docs/clear-signing/for-dapps/get-started
+  - https://developers.ledger.com/docs/clear-signing/for-wallets
+- Typed signing standards for transparent intent:
+  - https://eips.ethereum.org/EIPS/eip-712
+  - https://eips.ethereum.org/EIPS/eip-7730
 
+## Artifact Model
+
+Per run:
+- `reports/<runId>.json`: full machine evidence.
+- `reports/<runId>.md`: human-readable scorecard.
+
+This allows direct use in judging, CI gates, and post-event public benchmark publication.

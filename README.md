@@ -1,20 +1,20 @@
 # x402Bench Agentic Payments Benchmark
 
-Production-oriented benchmark suite for **agentic pay-per-request commerce** across a multi-layer trust path:
-- **Ledger** policy gate and approval control,
-- **Chainlink CRE** orchestration path,
-- **Hedera** settlement execution,
-- and x402-protected service probe verification.
+Production-oriented benchmark suite for agentic pay-per-request commerce across a multi-layer trust path:
+- Ledger policy/approval gates
+- Chainlink orchestration path
+- Hedera settlement execution
+- x402 service probe verification
 
 ## Why this exists
 
-Agentic payment systems are often demonstrated with one happy-path transaction. Teams still lack consistent benchmarks for:
-- reliability under retries,
-- p95 latency across orchestration + settlement,
-- policy safety behavior,
-- and production release readiness.
+Agentic payment systems are often demoed with one happy-path transaction. Teams still lack repeatable benchmarks for:
+- reliability under retries
+- p95 latency across orchestration + settlement
+- policy safety behavior
+- production release readiness
 
-x402Bench provides a repeatable benchmark harness and scorecard.
+x402Bench provides a deterministic benchmark harness and scorecard.
 
 ## Features
 
@@ -24,6 +24,15 @@ x402Bench provides a repeatable benchmark harness and scorecard.
 - Strict gate mode for CI/release checks
 - JSON + Markdown benchmark artifacts
 - Pluggable integrations for Hedera, Chainlink, Ledger
+- Hardened FastAPI backend with idempotency and run locking
+
+## Standards and Best-Practice Alignment
+
+See `docs/ARCHITECTURE.md` and `/api/v1/alignment` for the full mapping to:
+- Hedera transaction/mirror node references
+- Chainlink operations responsibilities and automation best practices
+- Ledger clear-signing guidance
+- EIP-712 / EIP-7730 typed-signing standards
 
 ## Project structure
 
@@ -109,25 +118,19 @@ npm run llm:bench
 
 Outputs are written to `llm_bench/results/*.json` and `llm_bench/results/*.md`.
 
-## Integration notes
+## Deployability Modes
 
-### Hedera
-- `relay` mode: use a payment relay endpoint.
-- `sdk` mode: install `@hashgraph/sdk`, set `HEDERA_OPERATOR_ID`, `HEDERA_OPERATOR_KEY`.
+- Local replay mode: deterministic artifacts, no chain dependency
+- Live testnet/devnet mode: real settlement/orchestration/policy proof
+- Hybrid mode: combine live showcase scenarios with replay bulk runs
 
-### Chainlink CRE
-- `cli` mode: requires CRE CLI available on PATH.
-- `webhook` mode: configure `CHAINLINK_WEBHOOK_URL`.
-
-### Ledger
-- `external_approver` mode: internal approval endpoint.
-- `ledger_hw` mode: install Ledger transport packages and connect a device.
+Detailed runbook: `docs/OPERATIONS.md`
 
 ## Hackathon usage
 
 - Fund test accounts via faucet if needed: https://ethglobal.com/faucet
-- Keep at least one high-value scenario to demonstrate approval controls.
-- Use generated Markdown report as a live judging artifact.
+- Keep at least one high-value scenario to demonstrate approval controls
+- Use generated Markdown report as a live judging artifact
 
 ## Output
 
