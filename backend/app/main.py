@@ -37,11 +37,18 @@ def _cors_origins() -> list[str]:
     origins = [item.strip() for item in raw.split(",") if item.strip()]
     return origins or ["http://localhost:3000"]
 
+def _cors_origin_regex() -> str:
+    return os.getenv(
+        "CORS_ALLOW_ORIGIN_REGEX",
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    )
+
 
 app = FastAPI(title="x402Bench API", version="1.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    allow_origin_regex=_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
