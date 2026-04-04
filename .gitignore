@@ -3,6 +3,8 @@ node_modules/
 reports/*.json
 reports/*.md
 reports/*.html
+reports/env_diagnostics/
+reports/manual-input-queue.md
 readiness_bench/results/*.json
 readiness_bench/results/*.md
 .DS_Store

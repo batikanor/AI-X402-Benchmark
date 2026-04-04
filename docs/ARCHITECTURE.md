@@ -1,105 +1,109 @@
 # Architecture: x402Bench LLM Readiness
 
-## System Diagram
+## System diagram
 
 ```mermaid
 flowchart TD
-    U["User (UI / API / CLI)"] --> API["FastAPI endpoint<br/>/api/v1/readiness/runs"]
-    API --> RUNNER["scripts/run_llm_readiness_benchmark.mjs"]
+    U["User (UI / API / CLI)"] --> API["FastAPI /api/v1/readiness/runs"]
+    API --> RUNNER["run_llm_readiness_benchmark.mjs"]
 
-    RUNNER --> SUITE["Scenario Suite<br/>readiness_bench/suite.json"]
-    RUNNER --> DOCSRULES["Docs Source List<br/>readiness_bench/docs_sources/default_sources.json"]
-    DOCSRULES --> DOCSBUILD["scripts/build_docs_pack.mjs"]
-    DOCSBUILD --> DOCSPACK["Docs Pack<br/>readiness_bench/docs_cache/default_docs_pack.json"]
+    RUNNER --> SUITE["Suite JSON (cases, expected policy, challengeTargets)"]
+    RUNNER --> DOCSRC["Docs source manifest"]
+    DOCSRC --> DOCSBUILD["build_docs_pack.mjs"]
+    DOCSBUILD --> DOCSPACK["Docs pack JSON"]
     RUNNER --> DOCSPACK
 
-    RUNNER --> PROMPT["Manual Prompt Template<br/>buildPrompt() in runner"]
-    SUITE --> PROMPT
-    DOCSPACK --> RETRIEVE["Excerpt Retrieval<br/>selectDocExcerpts()"]
+    SUITE --> PROMPT["Strict prompt builder"]
+    DOCSPACK --> RETRIEVE["Excerpt retrieval (top-k)"]
     RETRIEVE --> PROMPT
 
-    PROMPT --> LLM["LLM Runtime<br/>ollama OR openai_compat"]
-    LLM --> PARSE["Strict JSON + citations parse<br/>parseModelDecision()"]
-    PARSE --> EVAL["Decision + docs grounding scoring<br/>evaluateDecision()"]
+    PROMPT --> LLM["Runtime: ollama or openai_compat"]
+    LLM --> PARSE["Strict JSON parse"]
+    PARSE --> EVAL["Decision + controls + docs scoring"]
     EVAL --> GATE{"Execution eligible?"}
 
-    GATE -->|Yes| WF["BenchmarkRunner.runScenario()"]
-    WF --> CHAIN["Chainlink orchestration adapter"]
-    WF --> HEDERA["Hedera settlement adapter"]
-    WF --> LEDGER["Ledger approval/policy adapter"]
-    WF --> PROBE["Service probe adapter"]
+    GATE -->|Yes| WF["Workflow runner"]
+    WF --> CHAIN["Chainlink integration"]
+    WF --> HEDERA["Hedera integration"]
+    WF --> LEDGER["Ledger integration"]
+    WF --> PROBE["Service probe"]
 
-    GATE -->|No| SKIP["Decision-only evidence"]
-    CHAIN --> SUMMARY["modelSummaryRows()<br/>weighted overall score"]
-    HEDERA --> SUMMARY
-    LEDGER --> SUMMARY
-    PROBE --> SUMMARY
-    SKIP --> SUMMARY
+    GATE -->|No| SKIP["No execution; gate failure reason recorded"]
 
-    SUMMARY --> ARTIFACTS["JSON + Markdown artifacts<br/>readiness_bench/results/*.json|*.md"]
-    ARTIFACTS --> DASH["/api/v1/readiness/dashboard"]
-    DASH --> UI["Next.js leaderboard + evidence matrix"]
+    CHAIN --> ART["Result rows + model summaries"]
+    HEDERA --> ART
+    LEDGER --> ART
+    PROBE --> ART
+    SKIP --> ART
+
+    ART --> JSON["readiness_bench/results/*.json"]
+    ART --> MD["readiness_bench/results/*.md"]
+    ART --> DASH["/api/v1/readiness/dashboard"]
+    DASH --> UI["Next.js leaderboard + scenario audit"]
 ```
 
-## Source Of Truth Map
+## Source-of-truth map
 
-| Concern | Source | Type |
-| --- | --- | --- |
-| Scenario definitions, expected labels, required docs per case | `readiness_bench/suite.json` | Manual benchmark design |
-| Official docs URL list (user-editable) | `readiness_bench/docs_sources/default_sources.json` | Manual curation |
-| Cached docs content chunks | `readiness_bench/docs_cache/default_docs_pack.json` | Generated artifact |
-| Docs fetching/chunking logic | `scripts/build_docs_pack.mjs` | Programmatic pipeline |
-| Prompt template + strict schema | `buildPrompt()` in `scripts/run_llm_readiness_benchmark.mjs` | Manual prompt logic |
-| Docs retrieval per case | `selectDocExcerpts()` in `scripts/run_llm_readiness_benchmark.mjs` | Programmatic retrieval |
-| LLM runtime choice | API payload / CLI args (`runtime`, `models`) | User choice |
-| Score weights | `modelSummaryRows()` in `scripts/run_llm_readiness_benchmark.mjs` | Manual weighting design |
-| Real workflow execution path | `src/core/runner.js` + adapters in `src/adapters/*` | Programmatic execution |
+| Concern | Source |
+| --- | --- |
+| Cases, expected labels, required sources, sponsor challenge targets | `readiness_bench/suite.json` |
+| Official docs source list | `readiness_bench/docs_sources/default_sources.json` |
+| Cached docs chunks | `readiness_bench/docs_cache/default_docs_pack.json` |
+| Docs fetch/chunk pipeline | `scripts/build_docs_pack.mjs` |
+| Prompt + parse schema | `scripts/run_llm_readiness_benchmark.mjs` |
+| Retrieval per case | `selectDocExcerpts()` in runner |
+| Case scoring and execution gate | `evaluateDecision()` in runner |
+| Aggregate score weighting | `modelSummaryRows()` in runner |
+| Workflow execution | `src/core/runner.js` + `src/adapters/*` |
+| Dashboard payload shaping | `backend/app/main.py` |
+| UI rendering and explanations | `frontend/app/page.tsx` |
 
-## Manual Prompting vs Documentation Grounding
+## Prompting and docs-grounding
 
-- The benchmark **does use manual prompts** (fixed JSON schema + policy instructions) to keep output format stable and scoreable.
-- The benchmark is also **documentation-grounded**:
-  - docs are fetched from official URLs into a docs pack,
-  - excerpts are selected per case,
-  - model output must cite excerpt IDs (`source_id#chunk_index`),
-  - citation validity and required-source coverage affect score and execution eligibility.
+The benchmark intentionally uses a hybrid design:
+- fixed structured prompt + strict JSON output for deterministic scoring
+- case-level docs excerpts from official sources for grounding pressure
 
-This hybrid is intentional: deterministic scoring + real documentation-following pressure.
+This is deliberate: stable scoring plus realistic documentation-following behavior.
 
-## Weighting (Where It Comes From)
+## Gate semantics
 
-Weights are hard-coded in `modelSummaryRows()`:
+Execution gate is policy-driven and does not require docs pass.
 
-- Docs-enabled runs:
-  - Base policy 21%
-  - Controls F1 18%
-  - Parse rate 10%
-  - Full match 10%
-  - Workflow success 11%
-  - Docs grounding 12%
-  - Required source coverage 9%
-  - Citation validity 5%
-  - Latency score 4%
+Execution is allowed only when all are true:
+- case `executionMode` is `real`
+- expected case policy is `allow`
+- parse success
+- decision match
+- approval match
+- priority match
+- risk match
+- controls F1 >= 60
 
-- Docs-disabled runs:
-  - Base policy 28%
-  - Controls F1 24%
-  - Parse rate 14%
-  - Full match 14%
-  - Workflow success 15%
-  - Latency score 5%
+Docs metrics (`docsGrounded`, source coverage, citation validity):
+- contribute to quality score and strict-match metrics
+- do not directly block execution
 
-## Runtime / Tooling Model
+## Runtime model
 
-- Uses LLM runtimes:
-  - `ollama` (local models)
-  - `openai_compat` (HF Router/OpenRouter/OpenAI-compatible APIs)
-- Uses benchmark adapters and workflow tools in code.
-- Does **not** use MCP-based agent tool calling in the benchmark loop.
+Supported runtime modes:
+- `ollama` (local models)
+- `openai_compat` (HF Router/OpenRouter/OpenAI-compatible APIs)
 
-## Reliability Controls
+The benchmark does not depend on MCP tool-calling. It benchmarks structured policy reasoning and workflow readiness through deterministic adapters and endpoints.
 
-- Run serialization with condition locks (prevents overlapping readiness runs).
-- Idempotency cache support (`Idempotency-Key`) for duplicate-safe retries.
-- Bounded timeouts for subprocess benchmark execution.
-- Machine-readable + human-readable artifacts for auditing and judging.
+## Reliability controls
+
+- run serialization lock for readiness runs
+- idempotency key cache for duplicate-safe API triggers
+- bounded subprocess timeout for benchmark execution
+- JSON + Markdown artifacts for reproducible audits
+
+## Sponsor-track mapping model
+
+Each case may declare explicit `challengeTargets` (sponsor + challenge name) and `representativeRationale`.
+
+The UI uses this metadata for:
+- sponsor score grouping
+- scenario audit explanation
+- challenge representativeness transparency

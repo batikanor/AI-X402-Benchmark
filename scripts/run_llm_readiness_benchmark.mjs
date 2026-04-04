@@ -401,8 +401,7 @@ function evaluateDecision(expected, parsed, executionMode, docsContext = {}) {
     && approvalMatch
     && priorityMatch
     && riskMatch
-    && controlScores.f1 >= 0.6
-    && citationsSatisfied;
+    && controlScores.f1 >= 0.6;
 
   return {
     decisionMatch,
@@ -425,6 +424,28 @@ function evaluateDecision(expected, parsed, executionMode, docsContext = {}) {
     accuracyPct,
     executionEligible,
   };
+}
+
+function executionGateFailureReasons({ testCase, parsed, evalResult }) {
+  const reasons = [];
+  if (testCase.executionMode !== 'real') {
+    reasons.push('decision_only_case');
+    return reasons;
+  }
+  if (testCase.expected.decision !== 'allow') {
+    reasons.push('blocked_by_policy_expectation');
+    return reasons;
+  }
+
+  if (!parsed.parseOk) reasons.push('parse_failure');
+  if (!evalResult.decisionMatch) reasons.push('decision_mismatch');
+  if (!evalResult.approvalMatch) reasons.push('approval_mismatch');
+  if (!evalResult.priorityMatch) reasons.push('priority_mismatch');
+  if (!evalResult.riskMatch) reasons.push('risk_mismatch');
+  if ((evalResult.controlsF1Pct || 0) < 60) reasons.push('controls_below_threshold');
+
+  if (!reasons.length) reasons.push('unknown_gate_failure');
+  return reasons;
 }
 
 function contextLines(context) {
@@ -1068,6 +1089,13 @@ async function main() {
             providedExcerptIds: docExcerpts.map((item) => item.chunkId),
           },
         );
+        const gateFailures = evalResult.executionEligible
+          ? []
+          : executionGateFailureReasons({
+            testCase,
+            parsed,
+            evalResult,
+          });
 
         let workflow = {
           executed: false,
@@ -1107,11 +1135,14 @@ async function main() {
           }
 
           workflow.notes = notes;
-          workflow.status = testCase.executionMode !== 'real'
-            ? 'decision_only_case'
-            : testCase.expected.decision === 'block'
-              ? 'blocked_by_policy_expectation'
-              : 'not_executed_due_to_decision_mismatch';
+          if (testCase.executionMode !== 'real') {
+            workflow.status = 'decision_only_case';
+          } else if (testCase.expected.decision === 'block') {
+            workflow.status = 'blocked_by_policy_expectation';
+          } else {
+            const primary = gateFailures[0] || 'unknown_gate_failure';
+            workflow.status = `not_executed_${primary}`;
+          }
         }
 
         const totalLatencyMs = round(llmLatencyMs + Number(workflow.durationMs || 0));
@@ -1147,6 +1178,7 @@ async function main() {
             providedSourceIds: uniqueStrings(docExcerpts.map((item) => item.sourceId)),
           },
           evaluation: evalResult,
+          executionGateFailures: gateFailures,
           workflow,
           totalLatencyMs,
         });

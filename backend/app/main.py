@@ -577,6 +577,7 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
     config = _load_workflow_config()
     readiness_suite = _load_readiness_suite()
     cases = readiness_suite.get("cases", []) if isinstance(readiness_suite.get("cases"), list) else []
+    release = readiness_suite.get("release", {}) if isinstance(readiness_suite.get("release"), dict) else {}
     meta = report.get("meta", {}) if isinstance(report, dict) and isinstance(report.get("meta"), dict) else {}
     docs_meta = meta.get("docs", {}) if isinstance(meta.get("docs"), dict) else {}
     integration_status = _integration_status(config)
@@ -593,6 +594,9 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
         "mocked": False,
         "suiteName": readiness_suite.get("name", "x402Bench Readiness Suite"),
         "suiteVersion": readiness_suite.get("version", "1.0"),
+        "suiteReleaseName": release.get("name"),
+        "suiteReleaseVersion": release.get("version"),
+        "suiteReleaseUpdatedAt": release.get("updatedAt"),
         "suitePath": str(READINESS_SUITE_PATH),
         "scenarioCount": len(cases),
         "runtimeUsed": runtime_used,
@@ -628,6 +632,7 @@ def _scenario_templates() -> list[dict[str, Any]]:
         scenario = case.get("scenario", {}) if isinstance(case.get("scenario"), dict) else {}
         payment = scenario.get("payment", {}) if isinstance(scenario.get("payment"), dict) else {}
         expected = case.get("expected", {}) if isinstance(case.get("expected"), dict) else {}
+        challenge_targets = case.get("challengeTargets", []) if isinstance(case.get("challengeTargets"), list) else []
         templates.append(
             {
                 "id": str(case.get("id") or scenario.get("id") or ""),
@@ -645,6 +650,15 @@ def _scenario_templates() -> list[dict[str, Any]]:
                     "requiredControls": expected.get("requiredControls", []),
                 },
                 "requiredSources": case.get("requiredSources", []),
+                "representativeRationale": str(case.get("representativeRationale") or ""),
+                "challengeTargets": [
+                    {
+                        "sponsor": str(item.get("sponsor") or ""),
+                        "challenge": str(item.get("challenge") or ""),
+                    }
+                    for item in challenge_targets
+                    if isinstance(item, dict)
+                ],
             }
         )
     return templates
@@ -718,6 +732,7 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
                 },
                 "docs": item.get("docs", {}),
                 "evaluation": item.get("evaluation", {}),
+                "executionGateFailures": item.get("executionGateFailures", []),
                 "workflow": item.get("workflow", {}),
                 "totalLatencyMs": item.get("totalLatencyMs", 0),
             }

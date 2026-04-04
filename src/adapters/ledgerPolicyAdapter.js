@@ -8,14 +8,19 @@ export class LedgerPolicyAdapter {
   }
 
   evaluatePolicy({ amountUsd, destinationCountry }) {
-    const blockedCountries = new Set(this.globalPolicy.blockedCountries || []);
+    const blockedCountries = new Set(
+      (this.globalPolicy.blockedCountries || [])
+        .map((item) => String(item || "").trim().toUpperCase())
+        .filter(Boolean)
+    );
     const highValueThresholdUsd = Number(this.globalPolicy.highValueThresholdUsd || 0);
+    const normalizedCountry = String(destinationCountry || "").trim().toUpperCase();
 
-    if (destinationCountry && blockedCountries.has(destinationCountry)) {
+    if (normalizedCountry && blockedCountries.has(normalizedCountry)) {
       return {
         allowed: false,
         approvalRequired: false,
-        reason: `Destination country ${destinationCountry} is blocked by policy`
+        reason: `Destination country ${normalizedCountry} is blocked by policy`
       };
     }
 

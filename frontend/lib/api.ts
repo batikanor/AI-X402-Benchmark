@@ -1,4 +1,6 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const READINESS_FALLBACK_PATH = "/readiness-dashboard-fallback.json";
+const READINESS_TIMEOUT_MS = 5000;
 
 export interface RunResponse {
   ok: boolean;
@@ -7,6 +9,16 @@ export interface RunResponse {
   stderr: string;
   runId?: string | null;
   durationMs?: number;
+}
+
+export interface HealthResponse {
+  status: string;
+  workflowRunInProgress: boolean;
+  llmRunInProgress: boolean;
+  readinessRunInProgress: boolean;
+  workflowTimeoutSeconds: number;
+  llmTimeoutSeconds: number;
+  readinessTimeoutSeconds: number;
 }
 
 export interface DashboardResponse {
@@ -94,6 +106,11 @@ export interface LlmDashboardResponse {
 }
 
 export interface ReadinessDashboardResponse {
+  dataSource?: {
+    mode: "live" | "fallback";
+    message?: string;
+    backendBaseUrl?: string;
+  };
   project: {
     name: string;
     tagline: string;
@@ -105,6 +122,9 @@ export interface ReadinessDashboardResponse {
     mocked: boolean;
     suiteName: string;
     suiteVersion: string;
+    suiteReleaseName?: string | null;
+    suiteReleaseVersion?: string | null;
+    suiteReleaseUpdatedAt?: string | null;
     suitePath: string;
     scenarioCount: number;
     runtimeUsed: string;
@@ -224,6 +244,7 @@ export interface ReadinessDashboardResponse {
       accuracyPct: number;
       executionEligible: boolean;
     };
+    executionGateFailures: string[];
     workflow: {
       executed: boolean;
       status: string;
@@ -239,6 +260,7 @@ export interface ReadinessDashboardResponse {
     id: string;
     name: string;
     executionMode: string;
+    representativeRationale?: string;
     payment: {
       amountUsd: number;
       destinationCountry: string;
@@ -251,6 +273,10 @@ export interface ReadinessDashboardResponse {
       requiredControls: string[];
     };
     requiredSources: string[];
+    challengeTargets?: Array<{
+      sponsor: string;
+      challenge: string;
+    }>;
   }>;
 }
 
@@ -271,21 +297,95 @@ export async function fetchLlmDashboard(): Promise<LlmDashboardResponse> {
 }
 
 export async function fetchReadinessDashboard(): Promise<ReadinessDashboardResponse> {
-  const response = await fetch(`${API_BASE}/api/v1/readiness/dashboard`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Readiness dashboard request failed with status ${response.status}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), READINESS_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${API_BASE}/api/v1/readiness/dashboard`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Readiness dashboard request failed with status ${response.status}`);
+    }
+    const payload = (await response.json()) as ReadinessDashboardResponse;
+    return {
+      ...payload,
+      dataSource: {
+        mode: "live",
+        backendBaseUrl: API_BASE,
+      },
+    };
+  } catch (primaryError) {
+    const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
+    const fallbackResponse = await fetch(READINESS_FALLBACK_PATH, { cache: "no-store" });
+    if (!fallbackResponse.ok) {
+      throw new Error(
+        `Readiness dashboard unavailable. Live API (${API_BASE}) failed (${primaryMessage}) and fallback snapshot is missing.`,
+      );
+    }
+    const fallbackPayload = (await fallbackResponse.json()) as ReadinessDashboardResponse;
+    return {
+      ...fallbackPayload,
+      dataSource: {
+        mode: "fallback",
+        backendBaseUrl: API_BASE,
+        message: `Live backend unavailable (${primaryMessage}). Showing local snapshot.`,
+      },
+      track: {
+        ...fallbackPayload.track,
+        statusNote: `Live backend unavailable (${primaryMessage}). Showing local snapshot from readiness artifacts.`,
+      },
+    };
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return (await response.json()) as ReadinessDashboardResponse;
+}
+
+async function responseErrorText(response: Response): Promise<string> {
+  try {
+    const text = (await response.text()).trim();
+    if (!text) return "";
+    try {
+      const parsed = JSON.parse(text) as { detail?: unknown; message?: unknown };
+      if (typeof parsed?.detail === "string" && parsed.detail.trim()) return parsed.detail.trim();
+      if (typeof parsed?.message === "string" && parsed.message.trim()) return parsed.message.trim();
+    } catch {
+      // Not JSON; return the raw body.
+    }
+    return text;
+  } catch {
+    return "";
+  }
+}
+
+function idempotencyKey(prefix: string): string {
+  const rand = Math.random().toString(16).slice(2);
+  const uuid = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${rand}`;
+  return `${prefix}-${uuid}`;
+}
+
+export async function fetchHealth(): Promise<HealthResponse> {
+  const response = await fetch(`${API_BASE}/health`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Health request failed with status ${response.status}`);
+  }
+  return (await response.json()) as HealthResponse;
 }
 
 export async function runBenchmark(strict: boolean): Promise<RunResponse> {
   const response = await fetch(`${API_BASE}/api/v1/runs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey("workflow"),
+    },
     body: JSON.stringify({ strict }),
   });
   if (!response.ok) {
-    throw new Error(`Run request failed with status ${response.status}`);
+    const message = await responseErrorText(response);
+    throw new Error(
+      message ? `Run request failed with status ${response.status}: ${message}` : `Run request failed with status ${response.status}`,
+    );
   }
   return (await response.json()) as RunResponse;
 }
@@ -302,14 +402,29 @@ export async function runReadinessBenchmark(input: {
   maxTokens: number;
   temperature: number;
 }): Promise<RunResponse> {
-  const response = await fetch(`${API_BASE}/api/v1/readiness/runs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/readiness/runs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey("readiness"),
+      },
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Cannot reach readiness API at ${API_BASE}. Start backend API first (npm run api:start). Original error: ${message}`,
+    );
+  }
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Readiness run request failed with status ${response.status}: ${message}`);
+    const message = await responseErrorText(response);
+    throw new Error(
+      message
+        ? `Readiness run request failed with status ${response.status}: ${message}`
+        : `Readiness run request failed with status ${response.status}`,
+    );
   }
   return (await response.json()) as RunResponse;
 }
@@ -322,12 +437,17 @@ export async function runLlmBenchmark(input: {
 }): Promise<RunResponse> {
   const response = await fetch(`${API_BASE}/api/v1/llm/runs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey("llm"),
+    },
     body: JSON.stringify(input),
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`LLM run request failed with status ${response.status}: ${message}`);
+    const message = await responseErrorText(response);
+    throw new Error(
+      message ? `LLM run request failed with status ${response.status}: ${message}` : `LLM run request failed with status ${response.status}`,
+    );
   }
   return (await response.json()) as RunResponse;
 }

@@ -19,7 +19,7 @@ import useSWR from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { fetchReadinessDashboard, runReadinessBenchmark, type ReadinessDashboardResponse } from "@/lib/api";
+import { fetchHealth, fetchReadinessDashboard, runReadinessBenchmark, type ReadinessDashboardResponse } from "@/lib/api";
 
 type RuntimeMode = "ollama" | "openai_compat";
 type SponsorKey = "Hedera" | "Chainlink" | "Ledger";
@@ -28,6 +28,7 @@ type ReadinessScenario = ReadinessDashboardResponse["scenarios"][number];
 
 const HF_OPENAI_COMPAT_URL = "https://router.huggingface.co/v1";
 const SPONSORS: SponsorKey[] = ["Hedera", "Chainlink", "Ledger"];
+const OFFICIAL_DOC_DOMAINS = ["docs.hedera.com", "docs.chain.link", "developers.ledger.com", "eips.ethereum.org"];
 
 const GEMMA4_VARIANTS = [
   {
@@ -74,6 +75,98 @@ const MODEL_PRESETS = [
   },
 ];
 
+type SponsorChallengeInfo = {
+  title: string;
+  prizePool: string;
+  winnerSlots: string;
+  focus: string;
+};
+
+type SponsorTrackInfo = {
+  sponsor: SponsorKey;
+  totalPrize: string;
+  sourceUrl: string;
+  challenges: SponsorChallengeInfo[];
+};
+
+const SPONSOR_TRACKS: SponsorTrackInfo[] = [
+  {
+    sponsor: "Hedera",
+    totalPrize: "$15,000",
+    sourceUrl: "https://ethglobal.com/events/cannes2026/prizes/hedera",
+    challenges: [
+      {
+        title: "AI & Agentic Payments on Hedera",
+        prizePool: "$6,000",
+        winnerSlots: "Up to 2 teams ($3,000 each)",
+        focus: "Build AI agents that execute real payment/token flows on Hedera Testnet.",
+      },
+      {
+        title: "Tokenization on Hedera",
+        prizePool: "$2,500",
+        winnerSlots: "Up to 2 teams ($1,250 each)",
+        focus: "Use Hedera Token Service for token lifecycle/compliance operations.",
+      },
+      {
+        title: "\"No Solidity Allowed\" — Build with Hedera SDKs",
+        prizePool: "$3,000",
+        winnerSlots: "Up to 3 teams ($1,000 each)",
+        focus: "Use Hedera SDK/native services directly, no Solidity contracts.",
+      },
+      {
+        title: "ioBuilders Naryo Builder Challenge",
+        prizePool: "$3,500",
+        winnerSlots: "3 winners ($2,000 / $750 / $750)",
+        focus: "Use Naryo event listener with Hedera EVM + Mirror Node/Relay.",
+      },
+    ],
+  },
+  {
+    sponsor: "Chainlink",
+    totalPrize: "$7,000",
+    sourceUrl: "https://ethglobal.com/events/cannes2026/prizes/chainlink",
+    challenges: [
+      {
+        title: "Best workflow with Chainlink CRE",
+        prizePool: "$4,000",
+        winnerSlots: "Up to 2 teams ($2,000 each)",
+        focus: "Build/simulate/deploy CRE workflows integrating chain + external systems/LLMs/agents.",
+      },
+      {
+        title: "Connect the World with Chainlink",
+        prizePool: "$1,000",
+        winnerSlots: "Core prize pool track",
+        focus: "Use CCIP, Price Feeds, Data Streams, PoR, or VRF with meaningful on-chain state change.",
+      },
+      {
+        title: "Best usage of Chainlink privacy standard",
+        prizePool: "$2,000",
+        winnerSlots: "Up to 2 teams ($1,000 each)",
+        focus: "Use Confidential Compute and/or Confidential HTTP for privacy-preserving workflows.",
+      },
+    ],
+  },
+  {
+    sponsor: "Ledger",
+    totalPrize: "$10,000",
+    sourceUrl: "https://ethglobal.com/events/cannes2026/prizes/ledger",
+    challenges: [
+      {
+        title: "AI Agents x Ledger",
+        prizePool: "$6,000",
+        winnerSlots: "3 winners ($3,000 / $2,000 / $1,000)",
+        focus: "Use Ledger as trust layer for agent payments, approvals, identity, or copilots.",
+      },
+      {
+        title: "Clear Signing, Integrations & Apps",
+        prizePool: "$4,000",
+        winnerSlots: "2 winners ($2,500 / $1,500)",
+        focus: "Improve Clear Signing, SDK/wallet integrations, device apps, and Ledger UX.",
+      },
+    ],
+  },
+];
+
 type DisclosureProps = {
   title: string;
   subtitle?: string;
@@ -96,11 +189,30 @@ type HumanTask = {
 
 type SponsorAggregate = {
   sponsor: SponsorKey;
-  cases: number;
+  totalCases: number;
+  realCases: number;
+  decisionOnlyCases: number;
+  eligibleCases: number;
+  eligibleRealCases: number;
+  executedCases: number;
+  successfulExecutions: number;
   decisionAccuracyPct: number;
   docsGroundedPct: number;
+  executionGatePct: number;
+  executedPassPct: number;
   executionSignalPct: number;
+  executionSignalBasis: "executed_pass" | "gate_eligibility";
   sponsorScore: number;
+};
+
+type ModelCaseStats = {
+  totalCases: number;
+  realCases: number;
+  decisionOnlyCases: number;
+  eligibleCases: number;
+  eligibleRealCases: number;
+  executedCases: number;
+  successfulExecutions: number;
 };
 
 type MetricHeaderProps = {
@@ -110,7 +222,7 @@ type MetricHeaderProps = {
 
 function Disclosure({ title, subtitle, children, defaultOpen = false }: DisclosureProps) {
   return (
-    <details open={defaultOpen} className="group rounded-2xl border border-[#4a4a46] bg-soft/55 p-4">
+    <details open={defaultOpen} className="group rounded-2xl border border-[#4a4a46] bg-soft p-4">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
         <div>
           <p className="text-sm font-semibold text-stone-100">{title}</p>
@@ -131,7 +243,7 @@ function MetricHeader({ label, help }: MetricHeaderProps) {
         <button
           type="button"
           aria-label={`${label}: ${help}`}
-          className="peer inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#6b6b65] bg-[#2a2a28] text-[10px] font-bold text-stone-200"
+          className="peer inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#6b6b65] bg-[#1f1d1a] text-[10px] font-bold text-stone-200"
           title={help}
         >
           ?
@@ -147,6 +259,10 @@ function MetricHeader({ label, help }: MetricHeaderProps) {
 function metricLabel(value: number | undefined, suffix = ""): string {
   if (value === undefined || Number.isNaN(value)) return "-";
   return `${value.toFixed(2)}${suffix}`;
+}
+
+function ratioLabel(numerator: number, denominator: number): string {
+  return `${numerator}/${denominator}`;
 }
 
 function paramsLabel(value: number | null | undefined): string {
@@ -180,8 +296,17 @@ function normalizeWorkflowStatus(status: string | undefined): string {
   const value = String(status || "").toLowerCase();
   if (value === "success") return "success";
   if (value.includes("failed")) return "failed";
+  if (value === "decision_only_case") return "decision-only case";
+  if (value === "blocked_by_policy_expectation") return "policy-blocked case";
+  if (value === "not_executed_parse_failure") return "not executed (parse failure)";
+  if (value === "not_executed_decision_mismatch") return "not executed (decision mismatch)";
+  if (value === "not_executed_approval_mismatch") return "not executed (approval mismatch)";
+  if (value === "not_executed_priority_mismatch") return "not executed (priority mismatch)";
+  if (value === "not_executed_risk_mismatch") return "not executed (risk mismatch)";
+  if (value === "not_executed_controls_below_threshold") return "not executed (controls below threshold)";
+  if (value === "not_executed_unknown_gate_failure") return "not executed (gate failure)";
   if (value.includes("blocked")) return "blocked";
-  if (value.includes("mismatch")) return "decision mismatch";
+  if (value.includes("mismatch")) return "mismatch";
   if (value === "skipped") return "skipped";
   return value || "unknown";
 }
@@ -207,8 +332,9 @@ function statusChipTone(status: string | undefined): string {
   const normalized = normalizeWorkflowStatus(status);
   if (normalized === "success") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (normalized === "failed") return "border-rose-300/30 bg-rose-300/10 text-rose-200";
-  if (normalized === "blocked" || normalized === "decision mismatch") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
-  return "border-[#6b6b65] bg-[#2a2a28] text-stone-200";
+  if (normalized.includes("not executed") || normalized.includes("blocked")) return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  if (normalized.includes("decision-only")) return "border-[#6b6b65] bg-[#1f1d1a] text-stone-200";
+  return "border-[#6b6b65] bg-[#1f1d1a] text-stone-200";
 }
 
 function passLabel(value: boolean): string {
@@ -216,6 +342,14 @@ function passLabel(value: boolean): string {
 }
 
 function caseSponsors(caseDef: ReadinessScenario | undefined, fallbackExecutionMode: string): SponsorKey[] {
+  const explicitTargets = Array.isArray(caseDef?.challengeTargets) ? caseDef.challengeTargets : [];
+  const explicitSponsors = explicitTargets
+    .map((item) => String(item?.sponsor || ""))
+    .filter((item): item is SponsorKey => SPONSORS.includes(item as SponsorKey));
+  if (explicitSponsors.length) {
+    return Array.from(new Set(explicitSponsors));
+  }
+
   const rawSources = caseDef?.requiredSources ?? [];
   const sourceIds = rawSources.map((id) => String(id || "").toLowerCase());
   const set = new Set<SponsorKey>();
@@ -243,25 +377,84 @@ function caseSponsors(caseDef: ReadinessScenario | undefined, fallbackExecutionM
   return Array.from(set);
 }
 
+function executionGateFailureDetail(result: ReadinessResult): string {
+  if (result.executionMode !== "real") {
+    return "Decision-only case: execution gate is not applicable.";
+  }
+  if (result.expected.decision !== "allow") {
+    return "Policy-expected block case: execution is intentionally skipped.";
+  }
+  if (result.evaluation.executionEligible) {
+    return "Passed policy execution gate and became executable.";
+  }
+
+  const mapping: Record<string, string> = {
+    parse_failure: "output was not parseable strict JSON",
+    decision_mismatch: "allow/block decision mismatch",
+    approval_mismatch: "approval requirement mismatch",
+    priority_mismatch: "priority mismatch",
+    risk_mismatch: "risk-level mismatch",
+    controls_below_threshold: "control-selection quality below threshold (F1 < 60)",
+    unknown_gate_failure: "unknown gate failure",
+  };
+
+  const failures = (result.executionGateFailures ?? []).filter(Boolean);
+  if (!failures.length) {
+    const inferred: string[] = [];
+    if (!result.llm.parseOk) inferred.push("parse_failure");
+    if (!result.evaluation.decisionMatch) inferred.push("decision_mismatch");
+    if (!result.evaluation.approvalMatch) inferred.push("approval_mismatch");
+    if (!result.evaluation.priorityMatch) inferred.push("priority_mismatch");
+    if (!result.evaluation.riskMatch) inferred.push("risk_mismatch");
+    if ((result.evaluation.controlsF1Pct ?? 0) < 60) inferred.push("controls_below_threshold");
+    if (!inferred.length) inferred.push("unknown_gate_failure");
+    return `Gate failed because ${inferred.map((item) => mapping[item] ?? item).join("; ")}.`;
+  }
+
+  return `Gate failed because ${failures.map((item) => mapping[item] ?? item).join("; ")}.`;
+}
+
 function buildHumanTaskChecklist(result: ReadinessResult): HumanTask[] {
   const expectedControls = result.expected.requiredControls ?? [];
   const modelControls = result.llm.requiredControls ?? [];
   const workflowStatus = normalizeWorkflowStatus(result.workflow.status);
   const workflowSucceeded = workflowStatus === "success";
+  const docsEnabled = Boolean(result.docs?.enabled);
+  const isDecisionOnly = result.executionMode !== "real";
+  const isPolicyBlockCase = result.expected.decision !== "allow";
 
   const workflowTask: HumanTask =
-    result.executionMode === "decision_only"
+    isDecisionOnly
       ? {
           label: "Run execution path",
           passed: true,
           detail: "Case is decision-only, so execution is intentionally skipped.",
         }
+      : isPolicyBlockCase
+        ? {
+            label: "Run execution path",
+            passed: true,
+            detail: "Expected policy outcome is block, so no live execution is attempted.",
+          }
       : {
           label: "Run execution path",
           passed: workflowSucceeded,
           detail: workflowSucceeded
             ? `Workflow succeeded in ${metricLabel(result.workflow.durationMs)} ms.`
             : `Workflow status: ${workflowStatus}. ${rowTopIssue(result.workflow.notes ?? [])}`,
+        };
+
+  const executionGateTask: HumanTask =
+    isDecisionOnly || isPolicyBlockCase
+      ? {
+          label: "Pass execution eligibility gate",
+          passed: true,
+          detail: executionGateFailureDetail(result),
+        }
+      : {
+          label: "Pass execution eligibility gate",
+          passed: Boolean(result.evaluation.executionEligible),
+          detail: executionGateFailureDetail(result),
         };
 
   return [
@@ -291,27 +484,30 @@ function buildHumanTaskChecklist(result: ReadinessResult): HumanTask[] {
       detail: `Expected ${result.expected.riskLevel}; model returned ${result.llm.riskLevel || "unknown"}.`,
     },
     {
-      label: "Select required controls",
+      label: "Meet control threshold for execution",
+      passed: (result.evaluation.controlsF1Pct ?? 0) >= 60,
+      detail: `Execution threshold is F1 >= 60. Current controls F1 ${metricLabel(result.evaluation.controlsF1Pct)}%.`,
+    },
+    {
+      label: "Match required controls strictly",
       passed: (result.evaluation.controlsF1Pct ?? 0) >= 99.9,
       detail: `Expected: ${joinList(expectedControls)} | Returned: ${joinList(modelControls)} | Controls F1 ${metricLabel(result.evaluation.controlsF1Pct)}%.`,
     },
     {
       label: "Ground answer in required docs",
-      passed: Boolean(result.evaluation.docsGrounded),
-      detail: `Required sources hit: ${joinList(result.evaluation.requiredSourceHits ?? [])}. Coverage ${metricLabel(result.evaluation.requiredSourceCoveragePct)}%.`,
+      passed: docsEnabled ? Boolean(result.evaluation.docsGrounded) : true,
+      detail: docsEnabled
+        ? `Required sources hit: ${joinList(result.evaluation.requiredSourceHits ?? [])}. Coverage ${metricLabel(result.evaluation.requiredSourceCoveragePct)}%.`
+        : "Documentation grounding is disabled for this run.",
     },
     {
       label: "Provide valid citations",
-      passed: (result.evaluation.citationValidityPct ?? 0) >= 90,
-      detail: `${result.evaluation.validCitationCount ?? 0}/${result.evaluation.citationCount ?? 0} citations valid (${metricLabel(result.evaluation.citationValidityPct)}%).`,
+      passed: docsEnabled ? (result.evaluation.citationValidityPct ?? 0) >= 90 : true,
+      detail: docsEnabled
+        ? `${result.evaluation.validCitationCount ?? 0}/${result.evaluation.citationCount ?? 0} citations valid (${metricLabel(result.evaluation.citationValidityPct)}%).`
+        : "Citation validation is disabled because docs grounding is off.",
     },
-    {
-      label: "Pass execution eligibility gate",
-      passed: Boolean(result.evaluation.executionEligible),
-      detail: result.evaluation.executionEligible
-        ? "Decision satisfied policy checks and became executable."
-        : "Decision mismatch blocked execution path.",
-    },
+    executionGateTask,
     workflowTask,
   ];
 }
@@ -387,15 +583,6 @@ export default function HomePage() {
       setActiveModel(sortedModels[0].model);
     }
   }, [sortedModels, activeModel]);
-
-  const leader = sortedModels[0];
-  const leaderExecutionDetail = useMemo(() => {
-    if (!leader) return "No run data yet.";
-    if ((leader.executedScenarios ?? 0) === 0) {
-      return "No scenarios reached execution for this model, so execution rate is shown as 0%.";
-    }
-    return `Executed scenarios passed: ${leader.successfulExecutions}/${leader.executedScenarios}. Small samples can appear as 0% or 100%.`;
-  }, [leader]);
 
   const missingIntegrations: MissingIntegration[] = useMemo(() => {
     const status = data?.track.integrationStatus;
@@ -496,6 +683,56 @@ export default function HomePage() {
     return map;
   }, [data?.scenarios]);
 
+  const suiteCaseMix = useMemo(() => {
+    const scenarios = data?.scenarios ?? [];
+    const real = scenarios.filter((scenario) => String(scenario.executionMode).toLowerCase() === "real").length;
+    return {
+      total: scenarios.length,
+      real,
+      decisionOnly: scenarios.length - real,
+    };
+  }, [data?.scenarios]);
+
+  const modelCaseStatsByModel = useMemo(() => {
+    const map = new Map<string, ModelCaseStats>();
+
+    for (const modelRow of sortedModels) {
+      const rows = latestResultRows.filter((row) => row.model === modelRow.model);
+      const realCases = rows.filter((row) => row.executionMode === "real");
+      const eligibleCases = rows.filter((row) => row.evaluation.executionEligible);
+      const eligibleRealCases = realCases.filter((row) => row.evaluation.executionEligible);
+      const executedCases = rows.filter((row) => row.workflow.executed);
+      const successfulExecutions = executedCases.filter((row) => normalizeWorkflowStatus(row.workflow.status) === "success").length;
+
+      map.set(modelRow.model, {
+        totalCases: rows.length,
+        realCases: realCases.length,
+        decisionOnlyCases: rows.length - realCases.length,
+        eligibleCases: eligibleCases.length,
+        eligibleRealCases: eligibleRealCases.length,
+        executedCases: executedCases.length,
+        successfulExecutions,
+      });
+    }
+
+    return map;
+  }, [sortedModels, latestResultRows]);
+
+  const leader = sortedModels[0];
+  const leaderExecutionDetail = useMemo(() => {
+    if (!leader) return "No run data yet.";
+    const stats = modelCaseStatsByModel.get(leader.model);
+    if (!stats) return "No run data yet.";
+    if (stats.realCases === 0) return "No real execution cases in this benchmark suite.";
+    if (stats.eligibleRealCases === 0) {
+      return `No real cases passed the execution gate (${ratioLabel(0, stats.realCases)}), so execution pass rate is 0%.`;
+    }
+    if (stats.executedCases === 0) {
+      return `Real cases became eligible (${ratioLabel(stats.eligibleRealCases, stats.realCases)}) but none executed.`;
+    }
+    return `Executed real cases passed: ${ratioLabel(stats.successfulExecutions, stats.executedCases)} | Gate-eligible real: ${ratioLabel(stats.eligibleRealCases, stats.realCases)}.`;
+  }, [leader, modelCaseStatsByModel]);
+
   const sponsorBreakdownByModel = useMemo(() => {
     const byModel = new Map<string, SponsorAggregate[]>();
 
@@ -512,23 +749,39 @@ export default function HomePage() {
         if (!scoped.length) {
           sponsorRows.push({
             sponsor,
-            cases: 0,
+            totalCases: 0,
+            realCases: 0,
+            decisionOnlyCases: 0,
+            eligibleCases: 0,
+            eligibleRealCases: 0,
+            executedCases: 0,
+            successfulExecutions: 0,
             decisionAccuracyPct: 0,
             docsGroundedPct: 0,
+            executionGatePct: 0,
+            executedPassPct: 0,
             executionSignalPct: 0,
+            executionSignalBasis: "gate_eligibility",
             sponsorScore: 0,
           });
           continue;
         }
 
+        const realCases = scoped.filter((row) => row.executionMode === "real");
+        const decisionOnlyCases = scoped.length - realCases.length;
+        const eligibleCases = scoped.filter((row) => row.evaluation.executionEligible);
+        const eligibleRealCases = realCases.filter((row) => row.evaluation.executionEligible);
+        const executed = scoped.filter((row) => row.workflow.executed);
+        const successfulExecutions = executed.filter((row) => normalizeWorkflowStatus(row.workflow.status) === "success").length;
+
         const decisionAccuracyPct = scoped.reduce((acc, row) => acc + (row.evaluation.accuracyPct ?? 0), 0) / scoped.length;
         const docsGroundedPct =
           (scoped.filter((row) => row.evaluation.docsGrounded).length / scoped.length) * 100;
 
-        const executed = scoped.filter((row) => row.workflow.executed);
-        const executionSignalPct = executed.length
-          ? (executed.filter((row) => normalizeWorkflowStatus(row.workflow.status) === "success").length / executed.length) * 100
-          : (scoped.reduce((acc, row) => acc + (row.evaluation.executionEligible ? 100 : 0), 0) / scoped.length);
+        const executionGatePct = (eligibleCases.length / scoped.length) * 100;
+        const executedPassPct = executed.length ? (successfulExecutions / executed.length) * 100 : 0;
+        const executionSignalPct = executed.length ? executedPassPct : executionGatePct;
+        const executionSignalBasis = executed.length ? "executed_pass" : "gate_eligibility";
 
         const sponsorScore =
           decisionAccuracyPct * 0.5 +
@@ -537,10 +790,19 @@ export default function HomePage() {
 
         sponsorRows.push({
           sponsor,
-          cases: scoped.length,
+          totalCases: scoped.length,
+          realCases: realCases.length,
+          decisionOnlyCases,
+          eligibleCases: eligibleCases.length,
+          eligibleRealCases: eligibleRealCases.length,
+          executedCases: executed.length,
+          successfulExecutions,
           decisionAccuracyPct,
           docsGroundedPct,
+          executionGatePct,
+          executedPassPct,
           executionSignalPct,
+          executionSignalBasis,
           sponsorScore,
         });
       }
@@ -555,11 +817,32 @@ export default function HomePage() {
     () => sortedModels.find((row) => row.model === activeModel) ?? null,
     [sortedModels, activeModel],
   );
+  const activeModelCaseStats = useMemo(
+    () => (activeModel ? modelCaseStatsByModel.get(activeModel) ?? null : null),
+    [activeModel, modelCaseStatsByModel],
+  );
 
   const activeModelSponsorRows = useMemo(
     () => sponsorBreakdownByModel.get(activeModel ?? "") ?? [],
     [sponsorBreakdownByModel, activeModel],
   );
+
+  const scenarioCoverageRows = useMemo(() => {
+    const scenarios = data?.scenarios ?? [];
+    return SPONSORS.map((sponsor) => {
+      let mappedCases = 0;
+      let realCases = 0;
+      let decisionOnlyCases = 0;
+      for (const scenario of scenarios) {
+        const sponsors = caseSponsors(scenario, scenario.executionMode);
+        if (!sponsors.includes(sponsor)) continue;
+        mappedCases += 1;
+        if (String(scenario.executionMode).toLowerCase() === "real") realCases += 1;
+        else decisionOnlyCases += 1;
+      }
+      return { sponsor, mappedCases, realCases, decisionOnlyCases };
+    });
+  }, [data?.scenarios]);
 
   const activeModelCaseRows = useMemo(() => {
     return latestResultRows
@@ -606,6 +889,12 @@ export default function HomePage() {
     }
 
     try {
+      const health = await fetchHealth();
+      if (health.readinessRunInProgress) {
+        setRunSummary("A readiness run is already active. Wait for it to finish, then refresh before starting another run.");
+        return;
+      }
+
       setRunning(true);
       const result = await runReadinessBenchmark({
         models: effectiveModels,
@@ -635,7 +924,11 @@ export default function HomePage() {
           setRunSummary("Run completed. Dashboard is refreshing.");
         }
       } else {
-        setRunSummary(`Run not completed (code ${result.returnCode}). Open Technical logs.`);
+        if (result.returnCode === 409) {
+          setRunSummary("Run not started because another readiness run is already active. Retry after current run completes.");
+        } else {
+          setRunSummary(`Run not completed (code ${result.returnCode}). Open Technical logs.`);
+        }
       }
     } catch (runError) {
       const message = runError instanceof Error ? runError.message : String(runError);
@@ -649,10 +942,10 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
       <section className="mb-6">
-        <Card className="border-[#4a4a46] bg-[#2a2a28] p-6 md:p-8">
+        <Card className="border-[#4a4a46] bg-[#1f1d1a] p-6 md:p-8">
           <div className="relative z-10 flex flex-wrap items-start justify-between gap-5">
             <div className="space-y-3">
-              <Badge className="gap-1 border-[#6b6b65] bg-[#323230] text-stone-100">
+              <Badge className="gap-1 border-[#6b6b65] bg-[#353129] text-stone-100">
                 <Sparkles size={12} />
                 Live Readiness Leaderboard
               </Badge>
@@ -662,13 +955,13 @@ export default function HomePage() {
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
                 {(data?.project.sponsors ?? SPONSORS).map((sponsor) => (
-                  <Badge key={sponsor} className="border-[#6b6b65] bg-[#323230] text-stone-100">
+                  <Badge key={sponsor} className="border-[#6b6b65] bg-[#353129] text-stone-100">
                     {sponsor}
                   </Badge>
                 ))}
               </div>
             </div>
-            <div className="w-full max-w-sm rounded-2xl border border-[#4a4a46] bg-[#323230] p-4">
+            <div className="w-full max-w-sm rounded-2xl border border-[#4a4a46] bg-[#353129] p-4">
               <p className="text-[11px] uppercase tracking-[0.12em] text-stone-400">Latest Run</p>
               <p className="mt-1 truncate text-sm font-medium text-stone-100">{data?.latest?.runId ?? "No run yet"}</p>
               <p className="mt-1 text-xs text-stone-400">{formatDateTime(data?.latest?.finishedAt)}</p>
@@ -678,7 +971,97 @@ export default function HomePage() {
         </Card>
       </section>
 
-      {error ? (
+      <section className="mb-6">
+          <Disclosure
+            title="ETHGlobal Cannes 2026 Sponsor Challenge Map"
+            subtitle="Official challenge breakdown for sponsors used in this benchmark."
+            defaultOpen
+          >
+            <div className="grid gap-4 lg:grid-cols-3">
+              {SPONSOR_TRACKS.map((track) => (
+                <Card key={track.sponsor} className="space-y-3 border-[#4a4a46] bg-panel p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-base font-semibold">{track.sponsor}</h3>
+                  <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">total {track.totalPrize}</Badge>
+                </div>
+                <p className="text-xs text-stone-300">
+                  Source:{" "}
+                  <a
+                    href={track.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline decoration-[#6b6b65] underline-offset-2 hover:text-stone-100"
+                  >
+                    official ETHGlobal sponsor page
+                  </a>
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="data-table min-w-full text-left text-xs">
+                    <thead className="text-stone-300">
+                      <tr>
+                        <th className="px-2 py-2">Challenge</th>
+                        <th className="px-2 py-2">Pool</th>
+                        <th className="px-2 py-2">Winner Slots</th>
+                        <th className="px-2 py-2">Core Focus</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {track.challenges.map((challenge) => (
+                        <tr key={`${track.sponsor}-${challenge.title}`} className="border-t border-[#4a4a46]">
+                          <td className="px-2 py-2 font-medium">{challenge.title}</td>
+                          <td className="px-2 py-2">{challenge.prizePool}</td>
+                          <td className="px-2 py-2">{challenge.winnerSlots}</td>
+                          <td className="px-2 py-2">{challenge.focus}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                </Card>
+              ))}
+            </div>
+            <div className="mt-4 overflow-x-auto">
+              <table className="data-table min-w-full text-left text-xs">
+                <thead className="text-stone-300">
+                  <tr>
+                    <th className="px-2 py-2">Sponsor</th>
+                    <th className="px-2 py-2">Mapped Cases</th>
+                    <th className="px-2 py-2">Real Cases</th>
+                    <th className="px-2 py-2">Decision-Only Cases</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scenarioCoverageRows.map((row) => (
+                    <tr key={`coverage-${row.sponsor}`} className="border-t border-[#4a4a46]">
+                      <td className="px-2 py-2 font-medium">{row.sponsor}</td>
+                      <td className="px-2 py-2">{ratioLabel(row.mappedCases, suiteCaseMix.total)}</td>
+                      <td className="px-2 py-2">{row.realCases}</td>
+                      <td className="px-2 py-2">{row.decisionOnlyCases}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-xs text-stone-400">
+                Mappings are declared per case via <code>challengeTargets</code> in the suite. This table is not inferred from score outcomes.
+              </p>
+            </div>
+          </Disclosure>
+        </section>
+
+      {data?.dataSource?.mode === "fallback" ? (
+        <Card className="mb-6 border-amber-300/40 bg-amber-400/10 p-4">
+          <p className="text-sm text-amber-100">
+            {data.dataSource.message ??
+              "Live backend is unavailable. Showing local readiness snapshot so the UI remains usable."}
+          </p>
+          <p className="mt-2 text-xs text-amber-50/90">
+            To switch back to live mode, run backend API: <code>python3 -m pip install -r backend/requirements.txt</code> then{" "}
+            <code>npm run api:start</code>.
+          </p>
+        </Card>
+      ) : null}
+
+      {error && !data ? (
         <Card className="mb-6 border-red-400/50 p-4">
           <p className="text-sm text-red-200">
             Failed to load readiness dashboard: {error instanceof Error ? error.message : "Unknown error"}
@@ -687,7 +1070,7 @@ export default function HomePage() {
       ) : null}
 
       <section className="space-y-6">
-        <Card className="space-y-6 border-[#4a4a46] bg-panel/95 p-6">
+        <Card className="space-y-6 border-[#4a4a46] bg-panel p-6">
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <div className="space-y-4">
               <div className="space-y-1">
@@ -698,14 +1081,14 @@ export default function HomePage() {
                   id="runtime-mode"
                   value={runtime}
                   onChange={(event) => setRuntime(event.target.value as RuntimeMode)}
-                  className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                 >
                   <option value="ollama">Ollama (local models)</option>
                   <option value="openai_compat">OpenAI-compatible (HF Router/OpenRouter/Hosted)</option>
                 </select>
               </div>
 
-              <Card className="space-y-3 border-[#4a4a46] bg-soft/55 p-4">
+              <Card className="space-y-3 border-[#4a4a46] bg-soft p-4">
                 <div className="flex items-center gap-2 text-sm font-medium text-stone-100">
                   <Cpu size={15} />
                   Suggested model sets
@@ -716,7 +1099,7 @@ export default function HomePage() {
                       key={preset.id}
                       type="button"
                       onClick={() => applyModelPreset(preset.models, preset.label)}
-                      className="rounded-full border border-[#4a4a46] bg-[#2a2a28] px-3 py-1.5 text-xs font-semibold text-stone-100 transition hover:border-accent/50 hover:bg-accent/15"
+                      className="rounded-full border border-[#4a4a46] bg-[#1f1d1a] px-3 py-1.5 text-xs font-semibold text-stone-100 transition hover:border-accent/50 hover:bg-accent/20"
                     >
                       {preset.label}
                     </button>
@@ -734,7 +1117,7 @@ export default function HomePage() {
                     <label
                       key={model}
                       className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
-                        checked ? "border-accent bg-accent/15" : "border-[#4a4a46] bg-soft/60"
+                        checked ? "border-accent bg-accent/20" : "border-[#4a4a46] bg-soft"
                       }`}
                     >
                       <span className="truncate pr-2">
@@ -742,12 +1125,12 @@ export default function HomePage() {
                         <span className="ml-2 text-xs text-stone-400">{paramsLabel(modelParamsByName.get(model))}</span>
                       </span>
                       <span className="flex items-center gap-2">
-                        {recommended ? <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">recommended</Badge> : null}
+                        {recommended ? <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">recommended</Badge> : null}
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleModelSelection(model)}
-                          className="h-4 w-4 accent-[#4b6845]"
+                          className="h-4 w-4 accent-[#6a7448]"
                         />
                       </span>
                     </label>
@@ -758,7 +1141,7 @@ export default function HomePage() {
                 <p className="text-xs text-amber-200">No Ollama models detected. Install at least 2 text models first.</p>
               ) : null}
 
-              <Card className="space-y-3 bg-soft/55 p-4">
+              <Card className="space-y-3 bg-soft p-4">
                 <p className="text-sm font-medium">Gemma 4 variants (latest official)</p>
                 <div className="overflow-x-auto">
                   <table className="data-table min-w-full text-left text-xs">
@@ -786,7 +1169,7 @@ export default function HomePage() {
                 </div>
               </Card>
 
-              <Card className="space-y-2 bg-soft/55 p-4">
+              <Card className="space-y-2 bg-soft p-4">
                 <label htmlFor="custom-models" className="text-sm font-medium">
                   Manual model list (comma-separated)
                 </label>
@@ -795,13 +1178,13 @@ export default function HomePage() {
                   value={customModels}
                   onChange={(event) => setCustomModels(event.target.value)}
                   placeholder="gemma4:e4b,qwen3:4b-instruct,phi4:14b"
-                  className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                 />
                 <p className="text-xs text-stone-400">Effective models: {effectiveModels.length ? effectiveModels.join(", ") : "-"}</p>
               </Card>
 
               {runtime === "openai_compat" ? (
-                <Card className="space-y-3 bg-soft/55 p-4">
+                <Card className="space-y-3 bg-soft p-4">
                   <div className="space-y-1">
                     <label htmlFor="api-base-url" className="text-sm font-medium">
                       OpenAI-compatible base URL
@@ -811,7 +1194,7 @@ export default function HomePage() {
                       value={apiBaseUrl}
                       onChange={(event) => setApiBaseUrl(event.target.value)}
                       placeholder={HF_OPENAI_COMPAT_URL}
-                      className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
+                      className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                     />
                   </div>
                   <div className="space-y-1">
@@ -823,13 +1206,13 @@ export default function HomePage() {
                       value={apiKeyEnv}
                       onChange={(event) => setApiKeyEnv(event.target.value.toUpperCase())}
                       placeholder="HF_TOKEN"
-                      className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
+                      className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                     />
                   </div>
                 </Card>
               ) : null}
 
-              <Card className="space-y-3 bg-soft/55 p-4">
+              <Card className="space-y-3 bg-soft p-4">
                 <p className="text-sm font-medium">Documentation settings</p>
                 <div className="space-y-1">
                   <label htmlFor="docs-pack-path" className="text-sm font-medium">
@@ -840,7 +1223,7 @@ export default function HomePage() {
                     value={docsPackPath}
                     onChange={(event) => setDocsPackPath(event.target.value)}
                     placeholder={data?.track.docs?.defaultPackPath ?? "readiness_bench/docs_cache/default_docs_pack.json"}
-                    className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                   />
                 </div>
                 <div className="space-y-1">
@@ -851,7 +1234,7 @@ export default function HomePage() {
                     id="docs-top-k"
                     value={docsTopK}
                     onChange={(event) => setDocsTopK(Number(event.target.value))}
-                    className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                   >
                     {[3, 4, 5, 6, 8, 10, 12].map((value) => (
                       <option key={value} value={value}>
@@ -865,14 +1248,17 @@ export default function HomePage() {
                     type="checkbox"
                     checked={requireCitations}
                     onChange={(event) => setRequireCitations(event.target.checked)}
-                    className="h-4 w-4 accent-[#4b6845]"
+                    className="h-4 w-4 accent-[#6a7448]"
                   />
                   Require citation coverage for passing
                 </label>
+                <p className="text-xs text-stone-400">
+                  Official docs domains: {OFFICIAL_DOC_DOMAINS.join(", ")}
+                </p>
               </Card>
             </div>
 
-            <Card className="space-y-4 border-[#4a4a46] bg-soft/50 p-4">
+            <Card className="space-y-4 border-[#4a4a46] bg-soft p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-stone-100">Run Panel</p>
                 <p className="text-xs text-stone-300">Launch one integrated benchmark run.</p>
@@ -885,7 +1271,7 @@ export default function HomePage() {
                   id="runs-per-scenario"
                   value={runsPerScenario}
                   onChange={(event) => setRunsPerScenario(Number(event.target.value))}
-                  className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                 >
                   <option value={1}>1 (fast)</option>
                   <option value={2}>2 (stable)</option>
@@ -898,15 +1284,26 @@ export default function HomePage() {
                 {running ? "Running benchmark..." : "Run Benchmark"}
               </Button>
 
-              <div className="rounded-lg border border-[#4a4a46] bg-[#2a2a28] p-3">
+              <div className="rounded-lg border border-[#4a4a46] bg-[#1f1d1a] p-3">
                 <p className="text-[11px] uppercase tracking-[0.1em] text-stone-400">Run status</p>
                 <p className="mt-1 text-xs text-stone-200">{runSummary || "Run status will appear here."}</p>
               </div>
 
               <div className="space-y-2 text-xs text-stone-300">
                 <p className="font-semibold">Run configuration snapshot</p>
+                <p>
+                  Suite: {data?.track.suiteName || "-"} v{data?.track.suiteVersion || "-"}
+                </p>
+                {data?.track.suiteReleaseVersion ? (
+                  <p>
+                    Release: {data.track.suiteReleaseName || "x402Bench"} {data.track.suiteReleaseVersion}
+                    {data.track.suiteReleaseUpdatedAt ? ` (${data.track.suiteReleaseUpdatedAt})` : ""}
+                  </p>
+                ) : null}
                 <p>Mocked: {data?.track.mocked === false ? "No" : "Unknown"}</p>
-                <p>Cases: {data?.track.scenarioCount ?? "-"}</p>
+                <p>
+                  Cases: {suiteCaseMix.total} total ({suiteCaseMix.real} real, {suiteCaseMix.decisionOnly} decision-only)
+                </p>
                 <p>Docs grounding: {data?.track.docs?.enabled ? "On" : "Off"}</p>
                 <p>Integrations ready: {data?.track.integrationStatus?.isFullyConfigured ? "Yes" : "Partial"}</p>
               </div>
@@ -914,39 +1311,78 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Card className="space-y-2 border-[#4a4a46] bg-soft/55 p-4">
+            <Card className="space-y-2 border-[#4a4a46] bg-soft p-4">
               <div className="flex items-center gap-2 text-stone-300">
-                <Gauge size={16} /> Readiness Score
+                <Gauge size={16} /> LLM Readiness Index
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.overallScore)}`}>{leader ? metricLabel(leader.overallScore) : "-"}</p>
               <p className="text-xs text-stone-400">{leader ? leader.model : "No run data yet"}</p>
             </Card>
-            <Card className="space-y-2 border-[#4a4a46] bg-soft/55 p-4">
+            <Card className="space-y-2 border-[#4a4a46] bg-soft p-4">
               <div className="flex items-center gap-2 text-stone-300">
-                <Brain size={16} /> Policy Decision Quality
+                <Brain size={16} /> Decision Correctness
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.decisionAccuracyPct)}`}>
                 {leader ? metricLabel(leader.decisionAccuracyPct, "%") : "-"}
               </p>
-              <p className="text-xs text-stone-400">Policy, controls, and documentation correctness.</p>
+              <p className="text-xs text-stone-400">Decision, approval, priority, risk, and controls quality.</p>
             </Card>
-            <Card className="space-y-2 border-[#4a4a46] bg-soft/55 p-4">
+            <Card className="space-y-2 border-[#4a4a46] bg-soft p-4">
               <div className="flex items-center gap-2 text-stone-300">
-                <ShieldCheck size={16} /> Execution Pass Rate
+                <ShieldCheck size={16} /> Live Workflow Pass Rate
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.workflowSuccessRatePct)}`}>
                 {leader ? metricLabel(leader.workflowSuccessRatePct, "%") : "-"}
               </p>
               <p className="text-xs text-stone-400">{leaderExecutionDetail}</p>
             </Card>
-            <Card className="space-y-2 border-[#4a4a46] bg-soft/55 p-4">
+            <Card className="space-y-2 border-[#4a4a46] bg-soft p-4">
               <div className="flex items-center gap-2 text-stone-300">
-                <Timer size={16} /> P95 End-to-End Latency
+                <Timer size={16} /> Tail Latency (p95)
               </div>
               <p className="text-3xl font-semibold">{leader ? metricLabel(leader.p95TotalLatencyMs, " ms") : "-"}</p>
               <p className="text-xs text-stone-400">End-to-end p95 latency.</p>
             </Card>
           </div>
+
+          <Disclosure
+            title="How To Read This Benchmark"
+            subtitle="The denominator for each metric is explicit so 0/0, 0%, and 100% are interpretable."
+          >
+            <div className="overflow-x-auto">
+              <table className="data-table min-w-full text-left text-xs">
+                <thead className="text-stone-300">
+                  <tr>
+                    <th className="px-2 py-2">Term</th>
+                    <th className="px-2 py-2">Meaning</th>
+                    <th className="px-2 py-2">Denominator</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-[#4a4a46]">
+                    <td className="px-2 py-2 font-medium">Total cases</td>
+                    <td className="px-2 py-2">All scored prompts for the model.</td>
+                    <td className="px-2 py-2">All case rows for that model.</td>
+                  </tr>
+                  <tr className="border-t border-[#4a4a46]">
+                    <td className="px-2 py-2 font-medium">Real cases</td>
+                    <td className="px-2 py-2">Cases that can trigger live workflow execution.</td>
+                    <td className="px-2 py-2">Rows where execution mode is <code>real</code>.</td>
+                  </tr>
+                  <tr className="border-t border-[#4a4a46]">
+                    <td className="px-2 py-2 font-medium">Execution gate pass</td>
+                    <td className="px-2 py-2">Model output passed policy/docs requirements to become executable.</td>
+                    <td className="px-2 py-2">Usually all cases; additionally shown as real-only count.</td>
+                  </tr>
+                  <tr className="border-t border-[#4a4a46]">
+                    <td className="px-2 py-2 font-medium">Executed pass %</td>
+                    <td className="px-2 py-2">Success rate only among executed workflows.</td>
+                    <td className="px-2 py-2">Executed workflows only. If no executions, it is 0/0 and displays 0%.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Disclosure>
 
           <Disclosure title="Model Ranking" subtitle="Performance across policy, docs grounding, and execution" defaultOpen>
             <div className="overflow-x-auto">
@@ -959,30 +1395,43 @@ export default function HomePage() {
                     <th className="px-2 py-2">Policy Quality %</th>
                     <th className="px-2 py-2">Strict Match %</th>
                     <th className="px-2 py-2">Required Docs Coverage %</th>
+                    <th className="px-2 py-2">Cases (Real/Decision)</th>
+                    <th className="px-2 py-2">Gate Eligible (All)</th>
+                    <th className="px-2 py-2">Gate Eligible (Real)</th>
                     <th className="px-2 py-2">Executed Pass %</th>
                     <th className="px-2 py-2">Executed (Pass/Total)</th>
-                    <th className="px-2 py-2">Execution Gate Pass %</th>
                     <th className="px-2 py-2">Mean E2E Latency (ms)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedModels.map((row) => (
-                    <tr key={row.model} className="border-t border-[#4a4a46]">
-                      <td className="px-2 py-2 font-medium">{row.model}</td>
-                      <td className="px-2 py-2">{paramsLabel(row.paramsBillions)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.overallScore)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.fullMatchRatePct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.docsGroundingRatePct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.workflowSuccessRatePct)}</td>
-                      <td className="px-2 py-2">{`${row.successfulExecutions}/${row.executedScenarios}`}</td>
-                      <td className="px-2 py-2">{metricLabel(row.executionEligibilityPct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.avgTotalLatencyMs)}</td>
-                    </tr>
-                  ))}
+                  {sortedModels.map((row) => {
+                    const stats = modelCaseStatsByModel.get(row.model);
+                    return (
+                      <tr key={row.model} className="border-t border-[#4a4a46]">
+                        <td className="px-2 py-2 font-medium">{row.model}</td>
+                        <td className="px-2 py-2">{paramsLabel(row.paramsBillions)}</td>
+                        <td className="px-2 py-2">{metricLabel(row.overallScore)}</td>
+                        <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
+                        <td className="px-2 py-2">{metricLabel(row.fullMatchRatePct)}</td>
+                        <td className="px-2 py-2">{metricLabel(row.docsGroundingRatePct)}</td>
+                        <td className="px-2 py-2">
+                          {stats ? ratioLabel(stats.realCases, stats.decisionOnlyCases) : "-"}
+                        </td>
+                        <td className="px-2 py-2">
+                          {stats ? ratioLabel(stats.eligibleCases, stats.totalCases) : "-"}
+                        </td>
+                        <td className="px-2 py-2">
+                          {stats ? ratioLabel(stats.eligibleRealCases, stats.realCases) : "-"}
+                        </td>
+                        <td className="px-2 py-2">{metricLabel(row.workflowSuccessRatePct)}</td>
+                        <td className="px-2 py-2">{ratioLabel(row.successfulExecutions, row.executedScenarios)}</td>
+                        <td className="px-2 py-2">{metricLabel(row.avgTotalLatencyMs)}</td>
+                      </tr>
+                    );
+                  })}
                   {!sortedModels.length && !isLoading ? (
                     <tr>
-                      <td className="px-2 py-3 text-stone-400" colSpan={10}>
+                      <td className="px-2 py-3 text-stone-400" colSpan={12}>
                         No readiness benchmark results yet.
                       </td>
                     </tr>
@@ -1000,8 +1449,8 @@ export default function HomePage() {
                   onClick={() => setSponsorShowAllModels(true)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     sponsorShowAllModels
-                      ? "border-accent bg-accent/15 text-white"
-                      : "border-[#6b6b65] bg-[#2a2a28] text-stone-200 hover:border-accent/45 hover:bg-accent/12"
+                      ? "border-accent bg-accent/20 text-stone-100"
+                      : "border-[#6b6b65] bg-[#1f1d1a] text-stone-200 hover:border-accent/60 hover:bg-accent/20"
                   }`}
                 >
                   All models
@@ -1016,8 +1465,8 @@ export default function HomePage() {
                     }}
                     className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       !sponsorShowAllModels && activeModel === row.model
-                        ? "border-accent bg-accent/15 text-white"
-                        : "border-[#6b6b65] bg-[#2a2a28] text-stone-200 hover:border-accent/45 hover:bg-accent/12"
+                        ? "border-accent bg-accent/20 text-stone-100"
+                        : "border-[#6b6b65] bg-[#1f1d1a] text-stone-200 hover:border-accent/60 hover:bg-accent/20"
                     }`}
                   >
                     {row.model}
@@ -1028,17 +1477,17 @@ export default function HomePage() {
               {sponsorVisibleModels.map((modelRow) => {
                 const rows = sponsorBreakdownByModel.get(modelRow.model) ?? [];
                 return (
-                  <Card key={modelRow.model} className="bg-soft/55 p-4">
+                  <Card key={modelRow.model} className="bg-soft p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">{modelRow.model}</Badge>
-                      <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">overall {metricLabel(modelRow.overallScore)}</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">{modelRow.model}</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">overall {metricLabel(modelRow.overallScore)}</Badge>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="data-table min-w-full text-left text-xs">
                         <thead className="text-stone-300">
                           <tr>
                             <th className="px-2 py-2">Sponsor</th>
-                            <th className="px-2 py-2">Cases</th>
+                            <th className="px-2 py-2">Cases (Real/Decision)</th>
                             <th className="px-2 py-2">
                               <MetricHeader
                                 label="Policy Quality %"
@@ -1053,14 +1502,32 @@ export default function HomePage() {
                             </th>
                             <th className="px-2 py-2">
                               <MetricHeader
-                                label="Execution Outcome %"
-                                help="For executed cases: execution pass rate. For decision-only cases: execution gate pass signal."
+                                label="Gate Eligible (All)"
+                                help="Cases where the model output passed the execution gate out of all sponsor-scoped cases."
                               />
                             </th>
                             <th className="px-2 py-2">
                               <MetricHeader
-                                label="Sponsor Composite"
-                                help="Weighted score = 50% Policy Quality + 30% Docs Coverage + 20% Execution Outcome."
+                                label="Gate Eligible (Real)"
+                                help="Real execution cases that passed gate checks and became executable."
+                              />
+                            </th>
+                            <th className="px-2 py-2">
+                              <MetricHeader
+                                label="Executed (Pass/Total)"
+                                help="Only workflows that actually executed. 0/0 means no real case reached execution."
+                              />
+                            </th>
+                            <th className="px-2 py-2">
+                              <MetricHeader
+                                label="Executed Pass %"
+                                help="Success rate among executed workflows only."
+                              />
+                            </th>
+                            <th className="px-2 py-2">
+                              <MetricHeader
+                                label="Sponsor Score"
+                                help="Weighted score = 50% Policy Quality + 30% Docs Coverage + 20% execution signal (executed pass rate if executions exist; else gate eligibility)."
                               />
                             </th>
                           </tr>
@@ -1069,10 +1536,13 @@ export default function HomePage() {
                           {rows.map((row) => (
                             <tr key={`${modelRow.model}-${row.sponsor}`} className="border-t border-[#4a4a46]">
                               <td className="px-2 py-2 font-medium">{row.sponsor}</td>
-                              <td className="px-2 py-2">{row.cases}</td>
+                              <td className="px-2 py-2">{ratioLabel(row.realCases, row.decisionOnlyCases)}</td>
                               <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
                               <td className="px-2 py-2">{metricLabel(row.docsGroundedPct)}</td>
-                              <td className="px-2 py-2">{metricLabel(row.executionSignalPct)}</td>
+                              <td className="px-2 py-2">{ratioLabel(row.eligibleCases, row.totalCases)}</td>
+                              <td className="px-2 py-2">{ratioLabel(row.eligibleRealCases, row.realCases)}</td>
+                              <td className="px-2 py-2">{ratioLabel(row.successfulExecutions, row.executedCases)}</td>
+                              <td className="px-2 py-2">{metricLabel(row.executedPassPct)}</td>
                               <td className={`px-2 py-2 font-semibold ${toneForRate(row.sponsorScore)}`}>{metricLabel(row.sponsorScore)}</td>
                             </tr>
                           ))}
@@ -1089,7 +1559,7 @@ export default function HomePage() {
           </Disclosure>
         </Card>
 
-        <Card className="space-y-5 border-[#4a4a46] bg-panel/95 p-6">
+        <Card className="space-y-5 border-[#4a4a46] bg-panel p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold">Model Inspection</h2>
@@ -1108,8 +1578,8 @@ export default function HomePage() {
                 }}
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   activeModel === row.model
-                    ? "border-accent bg-accent/15 text-white"
-                    : "border-[#6b6b65] bg-[#2a2a28] text-stone-200 hover:border-accent/45 hover:bg-accent/12"
+                    ? "border-accent bg-accent/20 text-stone-100"
+                    : "border-[#6b6b65] bg-[#1f1d1a] text-stone-200 hover:border-accent/60 hover:bg-accent/20"
                 }`}
               >
                 {row.model} ({paramsLabel(row.paramsBillions)})
@@ -1118,26 +1588,31 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-3 md:grid-cols-4">
-            <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-stone-400">Readiness</p>
+            <Card className="space-y-1 bg-soft p-4">
+              <p className="text-xs uppercase tracking-wide text-stone-400">LLM Readiness Index</p>
               <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.overallScore)}`}>
                 {metricLabel(activeModelRow?.overallScore)}
               </p>
             </Card>
-            <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-stone-400">Policy Quality</p>
+            <Card className="space-y-1 bg-soft p-4">
+              <p className="text-xs uppercase tracking-wide text-stone-400">Decision Correctness</p>
               <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.decisionAccuracyPct)}`}>
                 {metricLabel(activeModelRow?.decisionAccuracyPct, "%")}
               </p>
             </Card>
-            <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-stone-400">Execution Pass Rate</p>
+            <Card className="space-y-1 bg-soft p-4">
+              <p className="text-xs uppercase tracking-wide text-stone-400">Live Workflow Pass</p>
               <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.workflowSuccessRatePct)}`}>
                 {metricLabel(activeModelRow?.workflowSuccessRatePct, "%")}
               </p>
+              <p className="text-xs text-stone-400">
+                {activeModelCaseStats
+                  ? `Executed ${ratioLabel(activeModelCaseStats.successfulExecutions, activeModelCaseStats.executedCases)} | Eligible real ${ratioLabel(activeModelCaseStats.eligibleRealCases, activeModelCaseStats.realCases)}`
+                  : "-"}
+              </p>
             </Card>
-            <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-stone-400">Avg Latency</p>
+            <Card className="space-y-1 bg-soft p-4">
+              <p className="text-xs uppercase tracking-wide text-stone-400">Mean E2E Latency</p>
               <p className="text-2xl font-semibold">{metricLabel(activeModelRow?.avgTotalLatencyMs, " ms")}</p>
             </Card>
           </div>
@@ -1148,7 +1623,7 @@ export default function HomePage() {
                 <thead className="text-stone-300">
                   <tr>
                     <th className="px-2 py-2">Sponsor</th>
-                    <th className="px-2 py-2">Cases</th>
+                    <th className="px-2 py-2">Cases (Real/Decision)</th>
                     <th className="px-2 py-2">
                       <MetricHeader
                         label="Policy Quality %"
@@ -1163,14 +1638,32 @@ export default function HomePage() {
                     </th>
                     <th className="px-2 py-2">
                       <MetricHeader
-                        label="Execution Outcome %"
-                        help="For executed cases: execution pass rate. For decision-only cases: execution gate pass signal."
+                        label="Gate Eligible (All)"
+                        help="Cases where the model output passed the execution gate out of all sponsor-scoped cases."
                       />
                     </th>
                     <th className="px-2 py-2">
                       <MetricHeader
-                        label="Sponsor Composite"
-                        help="Weighted score = 50% Policy Quality + 30% Docs Coverage + 20% Execution Outcome."
+                        label="Gate Eligible (Real)"
+                        help="Real execution cases that passed gate checks and became executable."
+                      />
+                    </th>
+                    <th className="px-2 py-2">
+                      <MetricHeader
+                        label="Executed (Pass/Total)"
+                        help="Only workflows that actually executed. 0/0 means no real case reached execution."
+                      />
+                    </th>
+                    <th className="px-2 py-2">
+                      <MetricHeader
+                        label="Executed Pass %"
+                        help="Success rate among executed workflows only."
+                      />
+                    </th>
+                    <th className="px-2 py-2">
+                      <MetricHeader
+                        label="Sponsor Score"
+                        help="Weighted score = 50% Policy Quality + 30% Docs Coverage + 20% execution signal (executed pass rate if executions exist; else gate eligibility)."
                       />
                     </th>
                   </tr>
@@ -1179,16 +1672,19 @@ export default function HomePage() {
                   {activeModelSponsorRows.map((row) => (
                     <tr key={`${activeModel}-${row.sponsor}`} className="border-t border-[#4a4a46]">
                       <td className="px-2 py-2 font-medium">{row.sponsor}</td>
-                      <td className="px-2 py-2">{row.cases}</td>
+                      <td className="px-2 py-2">{ratioLabel(row.realCases, row.decisionOnlyCases)}</td>
                       <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
                       <td className="px-2 py-2">{metricLabel(row.docsGroundedPct)}</td>
-                      <td className="px-2 py-2">{metricLabel(row.executionSignalPct)}</td>
+                      <td className="px-2 py-2">{ratioLabel(row.eligibleCases, row.totalCases)}</td>
+                      <td className="px-2 py-2">{ratioLabel(row.eligibleRealCases, row.realCases)}</td>
+                      <td className="px-2 py-2">{ratioLabel(row.successfulExecutions, row.executedCases)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.executedPassPct)}</td>
                       <td className={`px-2 py-2 font-semibold ${toneForRate(row.sponsorScore)}`}>{metricLabel(row.sponsorScore)}</td>
                     </tr>
                   ))}
                   {!activeModelSponsorRows.length ? (
                     <tr>
-                      <td className="px-2 py-3 text-stone-400" colSpan={6}>
+                      <td className="px-2 py-3 text-stone-400" colSpan={9}>
                         No sponsor breakdown for selected model yet.
                       </td>
                     </tr>
@@ -1205,15 +1701,16 @@ export default function HomePage() {
                 const passedCount = checklist.filter((item) => item.passed).length;
                 const scenario = scenarioById.get(row.caseId) || scenarioById.get(row.scenarioId);
                 const sponsors = caseSponsors(scenario, row.executionMode);
+                const challengeTargets = Array.isArray(scenario?.challengeTargets) ? scenario.challengeTargets : [];
                 return (
-                  <Card key={`${row.model}-${row.caseId}`} className="border-[#4a4a46] bg-soft/55 p-4">
+                  <Card key={`${row.model}-${row.caseId}`} className="border-[#4a4a46] bg-soft p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                        <Badge className="border-[#6b6b65] bg-[#2a2a28] text-stone-100">{row.caseName}</Badge>
+                        <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">{row.caseName}</Badge>
                       <Badge className={`border ${statusChipTone(row.workflow.status)}`}>{normalizeWorkflowStatus(row.workflow.status)}</Badge>
-                      <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">tasks passed: {passedCount}/{checklist.length}</Badge>
-                      <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">latency: {metricLabel(row.totalLatencyMs)} ms</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">tasks passed: {passedCount}/{checklist.length}</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">latency: {metricLabel(row.totalLatencyMs)} ms</Badge>
                       {sponsors.map((sponsor) => (
-                        <Badge key={`${row.caseId}-${sponsor}`} className="border-[#6b6b65] bg-[#2a2a28] text-white">
+                        <Badge key={`${row.caseId}-${sponsor}`} className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">
                           {sponsor}
                         </Badge>
                       ))}
@@ -1237,6 +1734,16 @@ export default function HomePage() {
                     </div>
 
                     <div className="mt-3 space-y-1 text-xs text-stone-400">
+                      <p>Execution mode: {row.executionMode === "real" ? "real workflow case" : "decision-only case"}</p>
+                      <p>Execution gate detail: {executionGateFailureDetail(row)}</p>
+                      <p>Representative rationale: {scenario?.representativeRationale || "no rationale annotated in suite"}</p>
+                      <p>
+                        Challenge targets:{" "}
+                        {challengeTargets.length
+                          ? challengeTargets.map((item) => `${item.sponsor}: ${item.challenge}`).join(" | ")
+                          : "not declared"}
+                      </p>
+                      <p>Required docs sources: {joinList(row.docs.requiredSources ?? [])}</p>
                       <p>Model reason: {row.llm.reason || "no reason text"}</p>
                       <p>Citation IDs: {joinList(row.llm.citations ?? [])}</p>
                       <p>Model output preview: {row.llm.rawOutputPreview || "n/a"}</p>
@@ -1251,7 +1758,7 @@ export default function HomePage() {
           </Disclosure>
         </Card>
 
-        <Card className="space-y-4 border-[#4a4a46] bg-panel/95 p-6">
+        <Card className="space-y-4 border-[#4a4a46] bg-panel p-6">
           <Disclosure title="Setup and Integration Requirements" subtitle="Explicit endpoint status and env template">
             <div className="space-y-4">
               {missingIntegrations.length > 0 ? (
@@ -1262,7 +1769,7 @@ export default function HomePage() {
                   </div>
                   <div className="mt-3 space-y-2 text-sm">
                     {missingIntegrations.map((item) => (
-                      <div key={item.integration} className="rounded-lg border border-amber-200/20 bg-[#2a2a28] px-3 py-2">
+                      <div key={item.integration} className="rounded-lg border border-amber-200/20 bg-[#1f1d1a] px-3 py-2">
                         <p className="font-medium text-amber-50">{item.integration}</p>
                         <p className="text-amber-50/90">Required: {item.required}</p>
                         <p className="text-amber-50/80">Reason: {item.reason}</p>
@@ -1274,16 +1781,16 @@ export default function HomePage() {
                 <p className="text-sm text-emerald-200">All explicit integration settings are configured.</p>
               )}
 
-              <Card className="bg-soft/55 p-4">
+              <Card className="bg-soft p-4">
                 <p className="mb-2 text-sm font-semibold">Environment snippet</p>
-                <pre className="overflow-auto rounded-lg bg-[#2a2a28] p-3 text-[11px] leading-5 text-stone-100">{envSnippet}</pre>
+                <pre className="overflow-auto rounded-lg bg-[#1f1d1a] p-3 text-[11px] leading-5 text-stone-100">{envSnippet}</pre>
               </Card>
             </div>
           </Disclosure>
 
           {runTechnicalLog ? (
             <Disclosure title="Technical Logs" subtitle="Raw run output for debugging">
-              <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-soft/60 p-3 text-[11px] leading-4 text-stone-200">
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-soft p-3 text-[11px] leading-4 text-stone-200">
                 {runTechnicalLog}
               </pre>
             </Disclosure>

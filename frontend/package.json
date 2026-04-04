@@ -1,12 +1,12 @@
 {
   "name": "x402bench-dashboard-frontend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "if [ ! -d .next/types ]; then next build >/dev/null; fi && rm -f tsconfig.tsbuildinfo && tsc --noEmit",
     "test:unit": "vitest run"
   },
   "dependencies": {
