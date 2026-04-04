@@ -112,7 +112,8 @@ npm run dev
 - `npm run ui:dev`: run Next.js frontend on port 3000
 - `npm run docs:build`: fetch official docs and build `readiness_bench/docs_cache/default_docs_pack.json`
 - `npm run llm:bench`: run real Ollama LLM benchmark on `gemma4:e4b`
-- `npm run readiness:bench`: run hard readiness benchmark across 4 local models
+- `npm run readiness:bench`: run hard readiness benchmark across 5 local models
+- `npm run readiness:bench:wide`: run wider local comparison across 6 models
 - `npm run readiness:bench:hf`: run the same benchmark against OpenAI-compatible hosted models (HF Router example)
 
 ## Integrated readiness benchmark

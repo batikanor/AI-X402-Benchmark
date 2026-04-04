@@ -151,14 +151,14 @@ class RunRequest(BaseModel):
 
 
 class LlmRunRequest(BaseModel):
-    models: list[str] = Field(min_length=2, max_length=6)
+    models: list[str] = Field(min_length=2, max_length=8)
     runsPerTask: int = Field(default=1, ge=1, le=3)
     maxTokens: int = Field(default=1024, ge=64, le=4096)
     temperature: float = Field(default=0.1, ge=0, le=1)
 
 
 class ReadinessRunRequest(BaseModel):
-    models: list[str] = Field(min_length=2, max_length=6)
+    models: list[str] = Field(min_length=2, max_length=8)
     runtime: str = Field(default="ollama")
     apiBaseUrl: str | None = Field(default=None, max_length=1024)
     apiKeyEnv: str = Field(default="OPENAI_API_KEY", max_length=64)
@@ -422,7 +422,7 @@ def _recommended_models(models: list[str]) -> list[str]:
     ordered = sorted(models, key=lambda item: (score(item), item), reverse=True)
     filtered = [item for item in ordered if score(item) > -100]
     base = filtered if filtered else ordered
-    return base[:4]
+    return base[:6]
 
 
 def _build_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:

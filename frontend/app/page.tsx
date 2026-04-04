@@ -90,7 +90,7 @@ function parseModelCsv(value: string): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-  return Array.from(new Set(items)).slice(0, 6);
+  return Array.from(new Set(items)).slice(0, 8);
 }
 
 export default function HomePage() {
@@ -117,7 +117,7 @@ export default function HomePage() {
       const filtered = previous.filter((model) => data.availableModels.includes(model));
       if (filtered.length >= 2) return filtered;
       const seeded = [...data.recommendedModels, ...data.availableModels];
-      return Array.from(new Set(seeded)).slice(0, Math.min(4, data.availableModels.length));
+      return Array.from(new Set(seeded)).slice(0, Math.min(6, data.availableModels.length));
     });
   }, [data]);
 
@@ -257,7 +257,7 @@ export default function HomePage() {
       if (previous.includes(model)) {
         return previous.filter((item) => item !== model);
       }
-      if (previous.length >= 6) {
+      if (previous.length >= 8) {
         return previous;
       }
       return [...previous, model];
@@ -409,7 +409,7 @@ export default function HomePage() {
                 </select>
               </div>
 
-              <p className="text-sm font-medium">Select models to benchmark (2 to 6)</p>
+              <p className="text-sm font-medium">Select models to benchmark (2 to 8)</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {(data?.availableModels ?? []).map((model) => {
                   const checked = selectedModels.includes(model);
