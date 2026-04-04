@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -19,6 +19,8 @@ DEFAULT_CONFIG = PROJECT_ROOT / "config" / "benchmark.config.json"
 LLM_RESULTS_DIR = PROJECT_ROOT / "llm_bench" / "results"
 LLM_SUITE_PATH = PROJECT_ROOT / "llm_bench" / "suite.json"
 LLM_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_ollama_llm_benchmark.mjs"
+READINESS_RESULTS_DIR = PROJECT_ROOT / "readiness_bench" / "results"
+READINESS_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_llm_readiness_benchmark.mjs"
 
 MODEL_NAME_REGEX = re.compile(r"^[A-Za-z0-9._:/-]+$")
 
@@ -26,9 +28,12 @@ RUN_COND = threading.Condition()
 RUN_IN_PROGRESS = False
 LLM_RUN_COND = threading.Condition()
 LLM_RUN_IN_PROGRESS = False
+READINESS_RUN_COND = threading.Condition()
+READINESS_RUN_IN_PROGRESS = False
 
 IDEMPOTENCY_CACHE: dict[str, dict[str, Any]] = {}
 LLM_IDEMPOTENCY_CACHE: dict[str, dict[str, Any]] = {}
+READINESS_IDEMPOTENCY_CACHE: dict[str, dict[str, Any]] = {}
 IDEMPOTENCY_TTL_SECONDS = 15 * 60
 
 
@@ -71,6 +76,15 @@ def _llm_timeout_seconds() -> int:
     return max(60, min(value, 7200))
 
 
+def _readiness_timeout_seconds() -> int:
+    raw = os.getenv("READINESS_BENCH_RUN_TIMEOUT_SECONDS", "3600")
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("READINESS_BENCH_RUN_TIMEOUT_SECONDS must be an integer") from exc
+    return max(120, min(value, 7200))
+
+
 def _workflow_join_wait_seconds() -> int:
     raw = os.getenv("WORKFLOW_JOIN_WAIT_SECONDS", "").strip()
     if not raw:
@@ -91,6 +105,17 @@ def _llm_join_wait_seconds() -> int:
     except ValueError as exc:
         raise RuntimeError("LLM_JOIN_WAIT_SECONDS must be an integer") from exc
     return max(30, min(value, 10800))
+
+
+def _readiness_join_wait_seconds() -> int:
+    raw = os.getenv("READINESS_JOIN_WAIT_SECONDS", "").strip()
+    if not raw:
+        return _readiness_timeout_seconds() + 30
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("READINESS_JOIN_WAIT_SECONDS must be an integer") from exc
+    return max(60, min(value, 10800))
 
 
 def _cors_origins() -> list[str]:
@@ -129,6 +154,13 @@ class LlmRunRequest(BaseModel):
     temperature: float = Field(default=0.1, ge=0, le=1)
 
 
+class ReadinessRunRequest(BaseModel):
+    models: list[str] = Field(min_length=2, max_length=6)
+    runsPerScenario: int = Field(default=1, ge=1, le=3)
+    maxTokens: int = Field(default=512, ge=64, le=4096)
+    temperature: float = Field(default=0.1, ge=0, le=1)
+
+
 class RunResponse(BaseModel):
     ok: bool
     returnCode: int
@@ -142,8 +174,10 @@ class HealthResponse(BaseModel):
     status: str
     workflowRunInProgress: bool
     llmRunInProgress: bool
+    readinessRunInProgress: bool
     workflowTimeoutSeconds: int
     llmTimeoutSeconds: int
+    readinessTimeoutSeconds: int
 
 
 class ChainlinkWebhookRequest(BaseModel):
@@ -184,6 +218,10 @@ def _latest_workflow_report() -> Path | None:
 
 def _latest_llm_report() -> Path | None:
     return _latest_report(LLM_RESULTS_DIR)
+
+
+def _latest_readiness_report() -> Path | None:
+    return _latest_report(READINESS_RESULTS_DIR)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -480,6 +518,142 @@ def _build_llm_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _readiness_definition() -> dict[str, Any]:
+    config = _load_workflow_config()
+    suite = config.get("suite", {}) if isinstance(config.get("suite"), dict) else {}
+    scenarios = config.get("scenarios", []) if isinstance(config.get("scenarios"), list) else []
+    integration_status = _integration_status(config)
+    return {
+        "name": "LLM readiness for payment workflows",
+        "whatIsBenchmarked": (
+            "Whether LLMs make correct policy and routing decisions for payment scenarios, "
+            "and whether those decisions execute successfully through Chainlink orchestration, "
+            "Hedera settlement, and Ledger policy controls."
+        ),
+        "mocked": False,
+        "suiteId": suite.get("id"),
+        "suiteName": suite.get("name"),
+        "scenarioCount": len(scenarios),
+        "integrationStatus": integration_status,
+        "statusNote": (
+            "Local integration fallbacks are auto-wired for API-triggered runs. "
+            "Set explicit sponsor endpoints for production-realistic validation."
+            if integration_status.get("isFullyConfigured")
+            else "Not all explicit integration URLs are configured. API-triggered runs will auto-wire local integration endpoints."
+        ),
+    }
+
+
+def _scenario_templates() -> list[dict[str, Any]]:
+    config = _load_workflow_config()
+    scenarios = config.get("scenarios", []) if isinstance(config.get("scenarios"), list) else []
+    policy = config.get("policy", {}) if isinstance(config.get("policy"), dict) else {}
+    blocked = set(policy.get("blockedCountries", []) if isinstance(policy.get("blockedCountries"), list) else [])
+    threshold = float(policy.get("highValueThresholdUsd", 0) or 0)
+
+    templates: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        if not isinstance(scenario, dict):
+            continue
+        payment = scenario.get("payment", {}) if isinstance(scenario.get("payment"), dict) else {}
+        workflow_input = scenario.get("workflowInput", {}) if isinstance(scenario.get("workflowInput"), dict) else {}
+        country = str(payment.get("destinationCountry", ""))
+        amount = float(payment.get("amountUsd", 0) or 0)
+        allowed = country not in blocked
+        approval_required = bool(allowed and amount >= threshold)
+        templates.append(
+            {
+                "id": scenario.get("id"),
+                "name": scenario.get("name"),
+                "expected": {
+                    "allow": allowed,
+                    "approvalRequired": approval_required,
+                    "priority": str(workflow_input.get("priority", "standard")),
+                },
+            }
+        )
+    return templates
+
+
+def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:
+    models = _list_ollama_models()
+    recommended_models = _recommended_models(models)
+    definition = _readiness_definition()
+    templates = _scenario_templates()
+
+    if not report:
+        return {
+            "project": {
+                "name": "x402Bench LLM Readiness",
+                "tagline": "One benchmark: model decision correctness plus real payment workflow execution.",
+                "sponsors": ["Hedera", "Chainlink", "Ledger"],
+            },
+            "track": definition,
+            "availableModels": models,
+            "recommendedModels": recommended_models,
+            "latest": None,
+            "models": [],
+            "results": [],
+            "scenarios": templates,
+        }
+
+    meta = report.get("meta", {}) if isinstance(report.get("meta"), dict) else {}
+    summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
+    model_rows = summary.get("models", []) if isinstance(summary.get("models"), list) else []
+    raw_results = report.get("results", []) if isinstance(report.get("results"), list) else []
+
+    trimmed_results = []
+    for item in raw_results:
+        if not isinstance(item, dict):
+            continue
+        llm = item.get("llm", {}) if isinstance(item.get("llm"), dict) else {}
+        trimmed_results.append(
+            {
+                "model": item.get("model"),
+                "scenarioId": item.get("scenarioId"),
+                "scenarioName": item.get("scenarioName"),
+                "attempt": item.get("attempt"),
+                "expected": item.get("expected", {}),
+                "llm": {
+                    "parseOk": llm.get("parseOk"),
+                    "decision": llm.get("decision"),
+                    "approvalRequired": llm.get("approvalRequired"),
+                    "priority": llm.get("priority"),
+                    "reason": llm.get("reason"),
+                    "latencyMs": llm.get("latencyMs", 0),
+                    "error": llm.get("error"),
+                    "rawOutputPreview": (str(llm.get("rawOutput", ""))[:400]).strip(),
+                },
+                "evaluation": item.get("evaluation", {}),
+                "workflow": item.get("workflow", {}),
+                "totalLatencyMs": item.get("totalLatencyMs", 0),
+            }
+        )
+
+    return {
+        "project": {
+            "name": "x402Bench LLM Readiness",
+            "tagline": "One benchmark: model decision correctness plus real payment workflow execution.",
+            "sponsors": ["Hedera", "Chainlink", "Ledger"],
+        },
+        "track": definition,
+        "availableModels": models,
+        "recommendedModels": recommended_models,
+        "latest": {
+            "runId": meta.get("runId"),
+            "startedAt": meta.get("startedAt"),
+            "finishedAt": meta.get("finishedAt"),
+            "scenarioCount": meta.get("scenarioCount", 0),
+            "runsPerScenario": meta.get("runsPerScenario", 0),
+            "models": meta.get("models", []),
+            "totalEvaluations": summary.get("totalEvaluations", 0),
+        },
+        "models": model_rows,
+        "results": trimmed_results,
+        "scenarios": templates,
+    }
+
+
 def _cache_get(cache: dict[str, dict[str, Any]], key: str) -> RunResponse | None:
     now = time.time()
     stale_keys = [item for item, entry in cache.items() if now - entry["ts"] > IDEMPOTENCY_TTL_SECONDS]
@@ -547,6 +721,30 @@ def _finish_llm_run() -> None:
         LLM_RUN_COND.notify_all()
 
 
+def _start_readiness_run_or_join(timeout_seconds: int) -> str:
+    global READINESS_RUN_IN_PROGRESS
+    with READINESS_RUN_COND:
+        if not READINESS_RUN_IN_PROGRESS:
+            READINESS_RUN_IN_PROGRESS = True
+            return "started"
+
+        deadline = time.monotonic() + timeout_seconds
+        while READINESS_RUN_IN_PROGRESS:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return "timeout"
+            READINESS_RUN_COND.wait(timeout=remaining)
+
+        return "joined"
+
+
+def _finish_readiness_run() -> None:
+    global READINESS_RUN_IN_PROGRESS
+    with READINESS_RUN_COND:
+        READINESS_RUN_IN_PROGRESS = False
+        READINESS_RUN_COND.notify_all()
+
+
 def _extract_run_id_from_stdout(stdout: str) -> str | None:
     text = stdout.strip()
     if not text:
@@ -587,14 +785,32 @@ def _validate_models_or_raise(models: list[str], available_models: list[str]) ->
     return unique
 
 
+def _self_base_url(request: Request) -> str:
+    configured = os.getenv("X402BENCH_SELF_BASE_URL", "").strip()
+    if configured:
+        return configured.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+def _subprocess_env_with_local_integrations(request: Request) -> tuple[dict[str, str], str]:
+    base_url = _self_base_url(request)
+    env = dict(os.environ)
+    env.setdefault("CHAINLINK_WEBHOOK_URL", f"{base_url}/api/v1/integrations/chainlink/webhook")
+    env.setdefault("LEDGER_APPROVER_URL", f"{base_url}/api/v1/integrations/ledger/approver")
+    env.setdefault("SERVICE_PROBE_URL", f"{base_url}/api/v1/integrations/service-probe")
+    return env, base_url
+
+
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         workflowRunInProgress=RUN_IN_PROGRESS,
         llmRunInProgress=LLM_RUN_IN_PROGRESS,
+        readinessRunInProgress=READINESS_RUN_IN_PROGRESS,
         workflowTimeoutSeconds=_timeout_seconds(),
         llmTimeoutSeconds=_llm_timeout_seconds(),
+        readinessTimeoutSeconds=_readiness_timeout_seconds(),
     )
 
 
@@ -696,8 +912,134 @@ def dashboard() -> dict[str, Any]:
     return _build_dashboard_payload(report)
 
 
+@app.get("/api/v1/readiness/runs/latest")
+def readiness_latest_run() -> dict[str, Any]:
+    latest = _latest_readiness_report()
+    if latest is None:
+        raise HTTPException(status_code=404, detail="No readiness benchmark report found. Run the readiness benchmark first.")
+    return _load_json(latest)
+
+
+@app.get("/api/v1/readiness/dashboard")
+def readiness_dashboard() -> dict[str, Any]:
+    latest = _latest_readiness_report()
+    if latest is None:
+        return _build_readiness_dashboard_payload({})
+    return _build_readiness_dashboard_payload(_load_json(latest))
+
+
+@app.post("/api/v1/readiness/runs", response_model=RunResponse)
+def run_readiness_benchmark(
+    payload: ReadinessRunRequest,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> RunResponse:
+    if idempotency_key:
+        cached = _cache_get(READINESS_IDEMPOTENCY_CACHE, idempotency_key)
+        if cached is not None:
+            return cached
+
+    available_models = _list_ollama_models()
+    models = _validate_models_or_raise(payload.models, available_models)
+
+    started = time.perf_counter()
+    run_state = _start_readiness_run_or_join(_readiness_join_wait_seconds())
+    if run_state == "timeout":
+        raise HTTPException(
+            status_code=409,
+            detail=f"A readiness benchmark run is already in progress and did not finish within {_readiness_join_wait_seconds()} seconds.",
+        )
+
+    if run_state == "joined":
+        latest = _latest_readiness_report()
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        response = RunResponse(
+            ok=True,
+            returnCode=0,
+            stdout="Joined an in-progress readiness run and returned the latest completed result.",
+            stderr="",
+            runId=latest.stem if latest else None,
+            durationMs=duration_ms,
+        )
+        if idempotency_key:
+            _cache_put(READINESS_IDEMPOTENCY_CACHE, idempotency_key, response)
+        return response
+
+    try:
+        READINESS_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        subprocess_env, base_url = _subprocess_env_with_local_integrations(request)
+        subprocess_env["X402BENCH_LOG_LEVEL"] = os.getenv("X402BENCH_API_RUN_LOG_LEVEL", "warn")
+        command = [
+            "node",
+            str(READINESS_SCRIPT_PATH),
+            "--config",
+            str(DEFAULT_CONFIG),
+            "--outdir",
+            str(READINESS_RESULTS_DIR),
+            "--models",
+            ",".join(models),
+            "--runs-per-scenario",
+            str(payload.runsPerScenario),
+            "--max-tokens",
+            str(payload.maxTokens),
+            "--temperature",
+            str(payload.temperature),
+            "--integration-base-url",
+            base_url,
+        ]
+
+        try:
+            process = subprocess.run(
+                command,
+                cwd=PROJECT_ROOT,
+                env=subprocess_env,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=_readiness_timeout_seconds(),
+            )
+        except subprocess.TimeoutExpired as timeout_error:
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            response = RunResponse(
+                ok=False,
+                returnCode=124,
+                stdout=(timeout_error.stdout or "").strip() if isinstance(timeout_error.stdout, str) else "",
+                stderr=f"readiness benchmark timed out after {_readiness_timeout_seconds()} seconds",
+                runId=None,
+                durationMs=duration_ms,
+            )
+            if idempotency_key:
+                _cache_put(READINESS_IDEMPOTENCY_CACHE, idempotency_key, response)
+            return response
+
+        stdout = process.stdout.strip()
+        run_id = _extract_run_id_from_stdout(stdout)
+        if not run_id:
+            latest = _latest_readiness_report()
+            run_id = latest.stem if latest else None
+
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        response = RunResponse(
+            ok=process.returncode == 0,
+            returnCode=process.returncode,
+            stdout=stdout,
+            stderr=process.stderr.strip(),
+            runId=run_id,
+            durationMs=duration_ms,
+        )
+        if idempotency_key:
+            _cache_put(READINESS_IDEMPOTENCY_CACHE, idempotency_key, response)
+        return response
+    finally:
+        _finish_readiness_run()
+
+
 @app.post("/api/v1/runs", response_model=RunResponse)
-def run_benchmark(payload: RunRequest, idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> RunResponse:
+def run_benchmark(
+    payload: RunRequest,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> RunResponse:
     if idempotency_key:
         cached = _cache_get(IDEMPOTENCY_CACHE, idempotency_key)
         if cached is not None:
@@ -727,6 +1069,8 @@ def run_benchmark(payload: RunRequest, idempotency_key: str | None = Header(defa
 
     try:
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        subprocess_env, _ = _subprocess_env_with_local_integrations(request)
+        subprocess_env["X402BENCH_LOG_LEVEL"] = os.getenv("X402BENCH_API_RUN_LOG_LEVEL", "warn")
         command = [
             "node",
             "src/cli.js",
@@ -743,6 +1087,7 @@ def run_benchmark(payload: RunRequest, idempotency_key: str | None = Header(defa
             process = subprocess.run(
                 command,
                 cwd=PROJECT_ROOT,
+                env=subprocess_env,
                 text=True,
                 capture_output=True,
                 check=False,

@@ -15,7 +15,8 @@
     "ui:build": "npm --prefix frontend run build",
     "ui:start": "npm --prefix frontend run start",
     "llm:bench": "node scripts/run_ollama_llm_benchmark.mjs --suite llm_bench/suite.json --models gemma4:e4b --outdir llm_bench/results",
-    "llm:bench:duel": "node scripts/run_ollama_llm_benchmark.mjs --suite llm_bench/suite.json --models gemma4:e4b,qwen3:4b-instruct --outdir llm_bench/results"
+    "llm:bench:duel": "node scripts/run_ollama_llm_benchmark.mjs --suite llm_bench/suite.json --models gemma4:e4b,qwen3:4b-instruct --outdir llm_bench/results",
+    "readiness:bench": "node scripts/run_llm_readiness_benchmark.mjs --config config/benchmark.config.json --models gemma4:e4b,qwen3:4b-instruct --outdir readiness_bench/results"
   },
   "engines": {
     "node": ">=20"

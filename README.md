@@ -1,6 +1,6 @@
-# x402Bench Agentic Payments Benchmark
+# x402Bench LLM Readiness Benchmark
 
-Production-oriented benchmark suite for agentic pay-per-request commerce across a multi-layer trust path:
+Production-oriented benchmark suite for AI payment flows across a multi-layer trust path:
 - Ledger policy/approval gates
 - Chainlink orchestration path
 - Hedera settlement execution
@@ -14,7 +14,7 @@ Agentic payment systems are often demoed with one happy-path transaction. Teams 
 - policy safety behavior
 - production release readiness
 
-x402Bench provides a deterministic benchmark harness and scorecard.
+x402Bench provides one integrated readiness benchmark and scorecard.
 
 ## Features
 
@@ -25,6 +25,7 @@ x402Bench provides a deterministic benchmark harness and scorecard.
 - JSON + Markdown benchmark artifacts
 - Pluggable integrations for Hedera, Chainlink, Ledger
 - Hardened FastAPI backend with idempotency and run locking
+- Integrated LLM readiness runner (decision correctness + real workflow execution in one score)
 
 ## Standards and Best-Practice Alignment
 
@@ -107,16 +108,17 @@ npm run dev
 - `npm run api:dev`: run FastAPI backend on port 8000
 - `npm run ui:dev`: run Next.js frontend on port 3000
 - `npm run llm:bench`: run real Ollama LLM benchmark on `gemma4:e4b`
+- `npm run readiness:bench`: run integrated LLM readiness benchmark across 2+ models
 
-## Real LLM benchmark
+## Integrated readiness benchmark
 
-Use local Ollama models for non-mock benchmark evidence:
+Use local Ollama models and real workflow integrations in one run:
 
 ```bash
-npm run llm:bench
+npm run readiness:bench
 ```
 
-Outputs are written to `llm_bench/results/*.json` and `llm_bench/results/*.md`.
+Outputs are written to `readiness_bench/results/*.json` and `readiness_bench/results/*.md`.
 
 ## Deployability Modes
 

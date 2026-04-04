@@ -93,6 +93,104 @@ export interface LlmDashboardResponse {
   }>;
 }
 
+export interface ReadinessDashboardResponse {
+  project: {
+    name: string;
+    tagline: string;
+    sponsors: string[];
+  };
+  track: {
+    name: string;
+    whatIsBenchmarked: string;
+    mocked: boolean;
+    suiteId?: string | null;
+    suiteName?: string | null;
+    scenarioCount: number;
+    statusNote: string;
+    integrationStatus: {
+      isFullyConfigured: boolean;
+      hedera: { mode: string; configured: boolean; reason: string };
+      chainlink: { mode: string; configured: boolean; reason: string };
+      ledger: { mode: string; configured: boolean; reason: string };
+      serviceProbe: { configured: boolean; reason: string };
+    };
+  };
+  availableModels: string[];
+  recommendedModels: string[];
+  latest: {
+    runId: string;
+    startedAt: string;
+    finishedAt: string;
+    scenarioCount: number;
+    runsPerScenario: number;
+    models: string[];
+    totalEvaluations: number;
+  } | null;
+  models: Array<{
+    model: string;
+    overallScore: number;
+    decisionAccuracyPct: number;
+    fullMatchRatePct: number;
+    executionEligibilityPct: number;
+    workflowSuccessRatePct: number;
+    executedScenarios: number;
+    successfulExecutions: number;
+    failedExecutions: number;
+    avgTotalLatencyMs: number;
+    p95TotalLatencyMs: number;
+    totalEvaluations: number;
+    expectedEvaluations: number;
+  }>;
+  results: Array<{
+    model: string;
+    scenarioId: string;
+    scenarioName: string;
+    attempt: number;
+    expected: {
+      allow: boolean;
+      approvalRequired: boolean;
+      priority: string;
+    };
+    llm: {
+      parseOk: boolean;
+      decision: string;
+      approvalRequired: boolean | null;
+      priority: string;
+      reason: string;
+      latencyMs: number;
+      error: string | null;
+      rawOutputPreview: string;
+    };
+    evaluation: {
+      decisionMatch: boolean;
+      approvalMatch: boolean;
+      priorityMatch: boolean;
+      fullMatch: boolean;
+      accuracyPct: number;
+      executionEligible: boolean;
+    };
+    workflow: {
+      executed: boolean;
+      status: string;
+      retryCount: number;
+      txHash: string | null;
+      workflowId: string | null;
+      durationMs: number;
+      notes: string[];
+    };
+    totalLatencyMs: number;
+  }>;
+  scenarios: Array<{
+    id: string;
+    name: string;
+    expected: {
+      allow: boolean;
+      approvalRequired: boolean;
+      priority: string;
+    };
+  }>;
+}
+
 export async function fetchDashboard(): Promise<DashboardResponse> {
   const response = await fetch(`${API_BASE}/api/v1/dashboard`, { cache: "no-store" });
   if (!response.ok) {
@@ -109,6 +207,14 @@ export async function fetchLlmDashboard(): Promise<LlmDashboardResponse> {
   return (await response.json()) as LlmDashboardResponse;
 }
 
+export async function fetchReadinessDashboard(): Promise<ReadinessDashboardResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/readiness/dashboard`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Readiness dashboard request failed with status ${response.status}`);
+  }
+  return (await response.json()) as ReadinessDashboardResponse;
+}
+
 export async function runBenchmark(strict: boolean): Promise<RunResponse> {
   const response = await fetch(`${API_BASE}/api/v1/runs`, {
     method: "POST",
@@ -117,6 +223,24 @@ export async function runBenchmark(strict: boolean): Promise<RunResponse> {
   });
   if (!response.ok) {
     throw new Error(`Run request failed with status ${response.status}`);
+  }
+  return (await response.json()) as RunResponse;
+}
+
+export async function runReadinessBenchmark(input: {
+  models: string[];
+  runsPerScenario: number;
+  maxTokens: number;
+  temperature: number;
+}): Promise<RunResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/readiness/runs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Readiness run request failed with status ${response.status}: ${message}`);
   }
   return (await response.json()) as RunResponse;
 }

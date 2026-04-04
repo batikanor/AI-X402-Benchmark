@@ -3,6 +3,8 @@ node_modules/
 reports/*.json
 reports/*.md
 reports/*.html
+readiness_bench/results/*.json
+readiness_bench/results/*.md
 .DS_Store
 backend/.venv/
 backend/app/__pycache__/

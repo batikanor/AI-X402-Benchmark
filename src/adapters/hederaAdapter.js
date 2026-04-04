@@ -6,6 +6,28 @@ function networkClientFactory(sdk, network) {
   return sdk.Client.forTestnet();
 }
 
+function boundedTimeoutMs(value, fallbackMs) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallbackMs;
+  return Math.min(Math.max(parsed, 5_000), 180_000);
+}
+
+async function withTimeout(promise, timeoutMs, label) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs} ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export class HederaAdapter {
   constructor(config, logger) {
     this.config = config;
@@ -30,19 +52,33 @@ export class HederaAdapter {
     }
 
     const apiKey = this.config.relayApiKey || getEnv("HEDERA_RELAY_API_KEY", "");
-    const resp = await fetch(relayUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
-      },
-      body: JSON.stringify({
-        runId,
-        scenarioId,
-        payment,
-        network: this.config.network || getEnv("HEDERA_NETWORK", "testnet")
-      })
-    });
+    const timeoutMs = boundedTimeoutMs(this.config.relayTimeoutMs || getEnv("HEDERA_RELAY_TIMEOUT_MS", "45000"), 45_000);
+    const controller = new AbortController();
+    const abortId = setTimeout(() => controller.abort(), timeoutMs);
+    let resp;
+    try {
+      resp = await fetch(relayUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          runId,
+          scenarioId,
+          payment,
+          network: this.config.network || getEnv("HEDERA_NETWORK", "testnet")
+        })
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error(`Hedera relay request timed out after ${timeoutMs} ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(abortId);
+    }
 
     if (!resp.ok) {
       const body = await resp.text();
@@ -86,21 +122,34 @@ export class HederaAdapter {
       sdk.PrivateKey.fromString(operatorKey)
     );
 
+    const sdkTimeoutMs = boundedTimeoutMs(this.config.sdkTimeoutMs || getEnv("HEDERA_SDK_TIMEOUT_MS", "60000"), 60_000);
     const hbarAmount = Number(payment.amountHbar || 1);
 
-    const tx = await new sdk.TransferTransaction()
-      .addHbarTransfer(operatorId, new sdk.Hbar(-hbarAmount))
-      .addHbarTransfer(payment.recipientAccountId, new sdk.Hbar(hbarAmount))
-      .execute(client);
+    try {
+      const tx = await withTimeout(
+        new sdk.TransferTransaction()
+          .addHbarTransfer(operatorId, new sdk.Hbar(-hbarAmount))
+          .addHbarTransfer(payment.recipientAccountId, new sdk.Hbar(hbarAmount))
+          .execute(client),
+        sdkTimeoutMs,
+        "Hedera SDK payment execution"
+      );
 
-    const receipt = await tx.getReceipt(client);
+      const receipt = await withTimeout(
+        tx.getReceipt(client),
+        sdkTimeoutMs,
+        "Hedera SDK receipt fetch"
+      );
 
-    return {
-      txHash: tx.transactionId.toString(),
-      transactionId: tx.transactionId.toString(),
-      status: receipt.status?.toString?.() || "UNKNOWN",
-      network,
-      mode: "sdk"
-    };
+      return {
+        txHash: tx.transactionId.toString(),
+        transactionId: tx.transactionId.toString(),
+        status: receipt.status?.toString?.() || "UNKNOWN",
+        network,
+        mode: "sdk"
+      };
+    } finally {
+      client.close();
+    }
   }
 }

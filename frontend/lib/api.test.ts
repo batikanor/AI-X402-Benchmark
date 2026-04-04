@@ -1,6 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { fetchDashboard, fetchLlmDashboard, runBenchmark, runLlmBenchmark } from "./api";
+import {
+  fetchDashboard,
+  fetchLlmDashboard,
+  fetchReadinessDashboard,
+  runBenchmark,
+  runLlmBenchmark,
+  runReadinessBenchmark,
+} from "./api";
 
 type MockResponse = {
   ok: boolean;
@@ -81,6 +88,46 @@ describe("x402 frontend api", () => {
     expect(options).toEqual({ cache: "no-store" });
   });
 
+  it("fetchReadinessDashboard requests readiness dashboard endpoint", async () => {
+    const payload = {
+      project: { name: "x402", tagline: "t", sponsors: [] },
+      track: {
+        name: "readiness",
+        whatIsBenchmarked: "x",
+        mocked: false,
+        scenarioCount: 1,
+        statusNote: "ok",
+        integrationStatus: {
+          isFullyConfigured: true,
+          hedera: { mode: "sdk", configured: true, reason: "ready" },
+          chainlink: { mode: "webhook", configured: true, reason: "ready" },
+          ledger: { mode: "external_approver", configured: true, reason: "ready" },
+          serviceProbe: { configured: true, reason: "ready" },
+        },
+      },
+      availableModels: ["gemma4:e4b", "qwen3:4b-instruct"],
+      recommendedModels: ["gemma4:e4b", "qwen3:4b-instruct"],
+      latest: null,
+      models: [],
+      results: [],
+      scenarios: [],
+    };
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    } as MockResponse);
+
+    const result = await fetchReadinessDashboard();
+
+    expect(result).toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/v1\/readiness\/dashboard$/);
+    expect(options).toEqual({ cache: "no-store" });
+  });
+
   it("runBenchmark posts strict payload", async () => {
     const payload = { ok: true, returnCode: 0, stdout: "done", stderr: "" };
     fetchMock.mockResolvedValue({
@@ -129,6 +176,35 @@ describe("x402 frontend api", () => {
     });
   });
 
+  it("runReadinessBenchmark posts integrated payload", async () => {
+    const payload = { ok: true, returnCode: 0, stdout: "done", stderr: "" };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    } as MockResponse);
+
+    const result = await runReadinessBenchmark({
+      models: ["gemma4:e4b", "qwen3:4b-instruct"],
+      runsPerScenario: 1,
+      maxTokens: 512,
+      temperature: 0.1,
+    });
+
+    expect(result).toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/v1\/readiness\/runs$/);
+    expect(options.method).toBe("POST");
+    expect(options.headers).toEqual({ "Content-Type": "application/json" });
+    expect(JSON.parse(String(options.body))).toEqual({
+      models: ["gemma4:e4b", "qwen3:4b-instruct"],
+      runsPerScenario: 1,
+      maxTokens: 512,
+      temperature: 0.1,
+    });
+  });
+
   it("fetchDashboard throws on non-2xx", async () => {
     fetchMock.mockResolvedValue({
       ok: false,
@@ -165,5 +241,23 @@ describe("x402 frontend api", () => {
         temperature: 0.1,
       }),
     ).rejects.toThrow("LLM run request failed with status 422: bad input");
+  });
+
+  it("runReadinessBenchmark throws on non-2xx", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 409,
+      text: async () => "run already in progress",
+      json: async () => ({}),
+    } as MockResponse & { text: () => Promise<string> });
+
+    await expect(
+      runReadinessBenchmark({
+        models: ["gemma4:e4b", "qwen3:4b-instruct"],
+        runsPerScenario: 1,
+        maxTokens: 512,
+        temperature: 0.1,
+      }),
+    ).rejects.toThrow("Readiness run request failed with status 409: run already in progress");
   });
 });
