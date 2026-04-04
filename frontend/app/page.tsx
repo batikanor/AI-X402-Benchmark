@@ -110,13 +110,13 @@ type MetricHeaderProps = {
 
 function Disclosure({ title, subtitle, children, defaultOpen = false }: DisclosureProps) {
   return (
-    <details open={defaultOpen} className="group rounded-2xl border border-white/10 bg-soft/40 p-4 backdrop-blur-sm">
+    <details open={defaultOpen} className="group rounded-2xl border border-[#4a4a46] bg-soft/55 p-4">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
         <div>
-          <p className="text-sm font-semibold text-gray-100">{title}</p>
-          {subtitle ? <p className="text-xs text-gray-400">{subtitle}</p> : null}
+          <p className="text-sm font-semibold text-stone-100">{title}</p>
+          {subtitle ? <p className="text-xs text-stone-400">{subtitle}</p> : null}
         </div>
-        <ChevronDown size={16} className="text-gray-400 transition group-open:rotate-180" />
+        <ChevronDown size={16} className="text-stone-400 transition group-open:rotate-180" />
       </summary>
       <div className="pt-4">{children}</div>
     </details>
@@ -131,12 +131,12 @@ function MetricHeader({ label, help }: MetricHeaderProps) {
         <button
           type="button"
           aria-label={`${label}: ${help}`}
-          className="peer inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/35 bg-white/5 text-[10px] font-bold text-gray-200"
+          className="peer inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#6b6b65] bg-[#2a2a28] text-[10px] font-bold text-stone-200"
           title={help}
         >
           ?
         </button>
-        <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-64 -translate-x-1/2 rounded-md border border-white/15 bg-[#042320] p-2 text-[11px] normal-case text-gray-200 shadow-glow peer-hover:block peer-focus-visible:block">
+        <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-64 -translate-x-1/2 rounded-md border border-[#4a4a46] bg-[#20201e] p-2 text-[11px] normal-case text-stone-200 shadow-glow peer-hover:block peer-focus-visible:block">
           {help}
         </span>
       </span>
@@ -197,7 +197,7 @@ function rowTopIssue(notes: string[]): string {
 }
 
 function toneForRate(value: number | undefined): string {
-  if (value === undefined || Number.isNaN(value)) return "text-gray-200";
+  if (value === undefined || Number.isNaN(value)) return "text-stone-200";
   if (value >= 85) return "text-emerald-300";
   if (value >= 60) return "text-amber-200";
   return "text-rose-300";
@@ -208,7 +208,7 @@ function statusChipTone(status: string | undefined): string {
   if (normalized === "success") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (normalized === "failed") return "border-rose-300/30 bg-rose-300/10 text-rose-200";
   if (normalized === "blocked" || normalized === "decision mismatch") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
-  return "border-white/20 bg-white/10 text-gray-200";
+  return "border-[#6b6b65] bg-[#2a2a28] text-stone-200";
 }
 
 function passLabel(value: boolean): string {
@@ -642,29 +642,29 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
       <section className="mb-6">
-        <Card className="relative overflow-hidden border-white/10 bg-[#001f1e]/90 p-6 md:p-8">
+        <Card className="border-[#4a4a46] bg-[#2a2a28] p-6 md:p-8">
           <div className="relative z-10 flex flex-wrap items-start justify-between gap-5">
             <div className="space-y-3">
-              <Badge className="gap-1 border-white/20 bg-white/10 text-white">
+              <Badge className="gap-1 border-[#6b6b65] bg-[#323230] text-stone-100">
                 <Sparkles size={12} />
-                Final Presentation UI
+                Live Readiness Leaderboard
               </Badge>
-              <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">x402Bench LLM Readiness</h1>
-              <p className="max-w-4xl text-sm text-gray-200 md:text-[15px]">
-                One integrated benchmark with two levels of reading: a global leaderboard for fast ranking, and one-click model deep dives for detailed judging.
+              <h1 className="text-3xl font-medium tracking-tight md:text-4xl">x402Bench LLM Readiness</h1>
+              <p className="max-w-4xl text-sm text-stone-200 md:text-[15px]">
+                Compare models on decision quality, documentation grounding, and real sponsor-workflow execution in one benchmark interface.
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
                 {(data?.project.sponsors ?? SPONSORS).map((sponsor) => (
-                  <Badge key={sponsor} className="border-white/25 bg-white/10 text-white">
+                  <Badge key={sponsor} className="border-[#6b6b65] bg-[#323230] text-stone-100">
                     {sponsor}
                   </Badge>
                 ))}
               </div>
             </div>
-            <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-black/20 p-4 backdrop-blur-sm">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-gray-400">Latest Run</p>
-              <p className="mt-1 truncate text-sm font-medium text-gray-100">{data?.latest?.runId ?? "No run yet"}</p>
-              <p className="mt-1 text-xs text-gray-400">{formatDateTime(data?.latest?.finishedAt)}</p>
+            <div className="w-full max-w-sm rounded-2xl border border-[#4a4a46] bg-[#323230] p-4">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-stone-400">Latest Run</p>
+              <p className="mt-1 truncate text-sm font-medium text-stone-100">{data?.latest?.runId ?? "No run yet"}</p>
+              <p className="mt-1 text-xs text-stone-400">{formatDateTime(data?.latest?.finishedAt)}</p>
               <p className={`mt-3 text-xs ${runStatusTone}`}>{runStatusLabel}</p>
             </div>
           </div>
@@ -680,7 +680,7 @@ export default function HomePage() {
       ) : null}
 
       <section className="space-y-6">
-        <Card className="space-y-6 border-white/15 bg-panel/95 p-6">
+        <Card className="space-y-6 border-[#4a4a46] bg-panel/95 p-6">
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <div className="space-y-4">
               <div className="space-y-1">
@@ -691,15 +691,15 @@ export default function HomePage() {
                   id="runtime-mode"
                   value={runtime}
                   onChange={(event) => setRuntime(event.target.value as RuntimeMode)}
-                  className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
                 >
                   <option value="ollama">Ollama (local models)</option>
                   <option value="openai_compat">OpenAI-compatible (HF Router/OpenRouter/hosted)</option>
                 </select>
               </div>
 
-              <Card className="space-y-3 border-white/10 bg-soft/55 p-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-gray-100">
+              <Card className="space-y-3 border-[#4a4a46] bg-soft/55 p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-stone-100">
                   <Cpu size={15} />
                   Quick model presets
                 </div>
@@ -709,13 +709,13 @@ export default function HomePage() {
                       key={preset.id}
                       type="button"
                       onClick={() => applyModelPreset(preset.models, preset.label)}
-                      className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-100 transition hover:border-accent/50 hover:bg-accent/15"
+                      className="rounded-full border border-[#4a4a46] bg-[#2a2a28] px-3 py-1.5 text-xs font-semibold text-stone-100 transition hover:border-accent/50 hover:bg-accent/15"
                     >
                       {preset.label}
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-gray-400">Presets only apply installed models.</p>
+                <p className="text-xs text-stone-400">Presets only apply installed models.</p>
               </Card>
 
               <p className="text-sm font-medium">Select models to benchmark (2 to 8)</p>
@@ -727,20 +727,20 @@ export default function HomePage() {
                     <label
                       key={model}
                       className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
-                        checked ? "border-accent bg-accent/15" : "border-white/15 bg-soft/60"
+                        checked ? "border-accent bg-accent/15" : "border-[#4a4a46] bg-soft/60"
                       }`}
                     >
                       <span className="truncate pr-2">
                         {model}
-                        <span className="ml-2 text-xs text-gray-400">{paramsLabel(modelParamsByName.get(model))}</span>
+                        <span className="ml-2 text-xs text-stone-400">{paramsLabel(modelParamsByName.get(model))}</span>
                       </span>
                       <span className="flex items-center gap-2">
-                        {recommended ? <Badge className="border-white/20 bg-white/10 text-white">recommended</Badge> : null}
+                        {recommended ? <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">recommended</Badge> : null}
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleModelSelection(model)}
-                          className="h-4 w-4 accent-teal-500"
+                          className="h-4 w-4 accent-[#4b6845]"
                         />
                       </span>
                     </label>
@@ -755,7 +755,7 @@ export default function HomePage() {
                 <p className="text-sm font-medium">Gemma 4 variants (latest official)</p>
                 <div className="overflow-x-auto">
                   <table className="data-table min-w-full text-left text-xs">
-                    <thead className="text-gray-300">
+                    <thead className="text-stone-300">
                       <tr>
                         <th className="px-2 py-2">Tag</th>
                         <th className="px-2 py-2">Variant</th>
@@ -766,7 +766,7 @@ export default function HomePage() {
                     </thead>
                     <tbody>
                       {GEMMA4_VARIANTS.map((variant) => (
-                        <tr key={variant.tag} className="border-t border-white/10">
+                        <tr key={variant.tag} className="border-t border-[#4a4a46]">
                           <td className="px-2 py-2 font-mono text-[11px]">{variant.tag}</td>
                           <td className="px-2 py-2">{variant.label}</td>
                           <td className="px-2 py-2">{variant.params}</td>
@@ -788,9 +788,9 @@ export default function HomePage() {
                   value={customModels}
                   onChange={(event) => setCustomModels(event.target.value)}
                   placeholder="gemma4:e4b,qwen3:4b-instruct,phi4:14b"
-                  className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
                 />
-                <p className="text-xs text-gray-400">Effective models: {effectiveModels.length ? effectiveModels.join(", ") : "-"}</p>
+                <p className="text-xs text-stone-400">Effective models: {effectiveModels.length ? effectiveModels.join(", ") : "-"}</p>
               </Card>
 
               {runtime === "openai_compat" ? (
@@ -804,7 +804,7 @@ export default function HomePage() {
                       value={apiBaseUrl}
                       onChange={(event) => setApiBaseUrl(event.target.value)}
                       placeholder={HF_OPENAI_COMPAT_URL}
-                      className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                      className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
                     />
                   </div>
                   <div className="space-y-1">
@@ -816,7 +816,7 @@ export default function HomePage() {
                       value={apiKeyEnv}
                       onChange={(event) => setApiKeyEnv(event.target.value.toUpperCase())}
                       placeholder="HF_TOKEN"
-                      className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                      className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
                     />
                   </div>
                 </Card>
@@ -833,7 +833,7 @@ export default function HomePage() {
                     value={docsPackPath}
                     onChange={(event) => setDocsPackPath(event.target.value)}
                     placeholder={data?.track.docs?.defaultPackPath ?? "readiness_bench/docs_cache/default_docs_pack.json"}
-                    className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
                   />
                 </div>
                 <div className="space-y-1">
@@ -844,7 +844,7 @@ export default function HomePage() {
                     id="docs-top-k"
                     value={docsTopK}
                     onChange={(event) => setDocsTopK(Number(event.target.value))}
-                    className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
                   >
                     {[3, 4, 5, 6, 8, 10, 12].map((value) => (
                       <option key={value} value={value}>
@@ -853,22 +853,22 @@ export default function HomePage() {
                     ))}
                   </select>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-gray-200">
+                <label className="flex items-center gap-2 text-sm text-stone-200">
                   <input
                     type="checkbox"
                     checked={requireCitations}
                     onChange={(event) => setRequireCitations(event.target.checked)}
-                    className="h-4 w-4 accent-teal-500"
+                    className="h-4 w-4 accent-[#4b6845]"
                   />
                   Require citation coverage for passing
                 </label>
               </Card>
             </div>
 
-            <Card className="space-y-4 border-white/10 bg-soft/50 p-4">
+            <Card className="space-y-4 border-[#4a4a46] bg-soft/50 p-4">
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-gray-100">Run Panel</p>
-                <p className="text-xs text-gray-300">Launch one integrated benchmark run.</p>
+                <p className="text-sm font-semibold text-stone-100">Run Panel</p>
+                <p className="text-xs text-stone-300">Launch one integrated benchmark run.</p>
               </div>
               <div className="space-y-1">
                 <label htmlFor="runs-per-scenario" className="text-sm font-medium">
@@ -878,7 +878,7 @@ export default function HomePage() {
                   id="runs-per-scenario"
                   value={runsPerScenario}
                   onChange={(event) => setRunsPerScenario(Number(event.target.value))}
-                  className="w-full rounded-lg border border-white/15 bg-soft/70 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-[#4a4a46] bg-soft/70 px-3 py-2 text-sm"
                 >
                   <option value={1}>1 (fast)</option>
                   <option value={2}>2 (stable)</option>
@@ -891,12 +891,12 @@ export default function HomePage() {
                 {running ? "Running benchmark..." : "Run Readiness Benchmark"}
               </Button>
 
-              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                <p className="text-[11px] uppercase tracking-[0.1em] text-gray-400">Run status</p>
-                <p className="mt-1 text-xs text-gray-200">{runSummary || "Run status will appear here."}</p>
+              <div className="rounded-lg border border-[#4a4a46] bg-[#2a2a28] p-3">
+                <p className="text-[11px] uppercase tracking-[0.1em] text-stone-400">Run status</p>
+                <p className="mt-1 text-xs text-stone-200">{runSummary || "Run status will appear here."}</p>
               </div>
 
-              <div className="space-y-2 text-xs text-gray-300">
+              <div className="space-y-2 text-xs text-stone-300">
                 <p className="font-semibold">Current benchmark coverage</p>
                 <p>Mocked: {data?.track.mocked === false ? "No" : "Unknown"}</p>
                 <p>Cases: {data?.track.scenarioCount ?? "-"}</p>
@@ -907,44 +907,44 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Card className="space-y-2 border-white/10 bg-soft/55 p-4">
-              <div className="flex items-center gap-2 text-gray-300">
+            <Card className="space-y-2 border-[#4a4a46] bg-soft/55 p-4">
+              <div className="flex items-center gap-2 text-stone-300">
                 <Gauge size={16} /> Leader Score
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.overallScore)}`}>{leader ? metricLabel(leader.overallScore) : "-"}</p>
-              <p className="text-xs text-gray-400">{leader ? leader.model : "No run data yet"}</p>
+              <p className="text-xs text-stone-400">{leader ? leader.model : "No run data yet"}</p>
             </Card>
-            <Card className="space-y-2 border-white/10 bg-soft/55 p-4">
-              <div className="flex items-center gap-2 text-gray-300">
+            <Card className="space-y-2 border-[#4a4a46] bg-soft/55 p-4">
+              <div className="flex items-center gap-2 text-stone-300">
                 <Brain size={16} /> Decision Accuracy
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.decisionAccuracyPct)}`}>
                 {leader ? metricLabel(leader.decisionAccuracyPct, "%") : "-"}
               </p>
-              <p className="text-xs text-gray-400">Policy, controls, and documentation correctness.</p>
+              <p className="text-xs text-stone-400">Policy, controls, and documentation correctness.</p>
             </Card>
-            <Card className="space-y-2 border-white/10 bg-soft/55 p-4">
-              <div className="flex items-center gap-2 text-gray-300">
+            <Card className="space-y-2 border-[#4a4a46] bg-soft/55 p-4">
+              <div className="flex items-center gap-2 text-stone-300">
                 <ShieldCheck size={16} /> Workflow Success
               </div>
               <p className={`text-3xl font-semibold ${toneForRate(leader?.workflowSuccessRatePct)}`}>
                 {leader ? metricLabel(leader.workflowSuccessRatePct, "%") : "-"}
               </p>
-              <p className="text-xs text-gray-400">Only eligible cases attempt execution.</p>
+              <p className="text-xs text-stone-400">Only eligible cases attempt execution.</p>
             </Card>
-            <Card className="space-y-2 border-white/10 bg-soft/55 p-4">
-              <div className="flex items-center gap-2 text-gray-300">
+            <Card className="space-y-2 border-[#4a4a46] bg-soft/55 p-4">
+              <div className="flex items-center gap-2 text-stone-300">
                 <Timer size={16} /> P95 Total
               </div>
               <p className="text-3xl font-semibold">{leader ? metricLabel(leader.p95TotalLatencyMs, " ms") : "-"}</p>
-              <p className="text-xs text-gray-400">End-to-end p95 latency.</p>
+              <p className="text-xs text-stone-400">End-to-end p95 latency.</p>
             </Card>
           </div>
 
           <Disclosure title="General Leaderboard" subtitle="Global performance across all scored dimensions" defaultOpen>
             <div className="overflow-x-auto">
               <table className="data-table min-w-full text-left text-sm">
-                <thead className="text-gray-300">
+                <thead className="text-stone-300">
                   <tr>
                     <th className="px-2 py-2">Model</th>
                     <th className="px-2 py-2">Params (B)</th>
@@ -959,7 +959,7 @@ export default function HomePage() {
                 </thead>
                 <tbody>
                   {sortedModels.map((row) => (
-                    <tr key={row.model} className="border-t border-white/10">
+                    <tr key={row.model} className="border-t border-[#4a4a46]">
                       <td className="px-2 py-2 font-medium">{row.model}</td>
                       <td className="px-2 py-2">{paramsLabel(row.paramsBillions)}</td>
                       <td className="px-2 py-2">{metricLabel(row.overallScore)}</td>
@@ -973,7 +973,7 @@ export default function HomePage() {
                   ))}
                   {!sortedModels.length && !isLoading ? (
                     <tr>
-                      <td className="px-2 py-3 text-gray-400" colSpan={9}>
+                      <td className="px-2 py-3 text-stone-400" colSpan={9}>
                         No readiness benchmark results yet.
                       </td>
                     </tr>
@@ -992,7 +992,7 @@ export default function HomePage() {
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     sponsorShowAllModels
                       ? "border-accent bg-accent/15 text-white"
-                      : "border-white/20 bg-white/5 text-gray-200 hover:border-accent/45 hover:bg-accent/12"
+                      : "border-[#6b6b65] bg-[#2a2a28] text-stone-200 hover:border-accent/45 hover:bg-accent/12"
                   }`}
                 >
                   All models
@@ -1008,7 +1008,7 @@ export default function HomePage() {
                     className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       !sponsorShowAllModels && activeModel === row.model
                         ? "border-accent bg-accent/15 text-white"
-                        : "border-white/20 bg-white/5 text-gray-200 hover:border-accent/45 hover:bg-accent/12"
+                        : "border-[#6b6b65] bg-[#2a2a28] text-stone-200 hover:border-accent/45 hover:bg-accent/12"
                     }`}
                   >
                     {row.model}
@@ -1021,12 +1021,12 @@ export default function HomePage() {
                 return (
                   <Card key={modelRow.model} className="bg-soft/55 p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <Badge className="border-white/20 bg-white/10 text-white">{modelRow.model}</Badge>
-                      <Badge className="border-white/20 bg-white/5 text-white">overall {metricLabel(modelRow.overallScore)}</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">{modelRow.model}</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">overall {metricLabel(modelRow.overallScore)}</Badge>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="data-table min-w-full text-left text-xs">
-                        <thead className="text-gray-300">
+                        <thead className="text-stone-300">
                           <tr>
                             <th className="px-2 py-2">Sponsor</th>
                             <th className="px-2 py-2">Cases</th>
@@ -1058,7 +1058,7 @@ export default function HomePage() {
                         </thead>
                         <tbody>
                           {rows.map((row) => (
-                            <tr key={`${modelRow.model}-${row.sponsor}`} className="border-t border-white/10">
+                            <tr key={`${modelRow.model}-${row.sponsor}`} className="border-t border-[#4a4a46]">
                               <td className="px-2 py-2 font-medium">{row.sponsor}</td>
                               <td className="px-2 py-2">{row.cases}</td>
                               <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
@@ -1074,19 +1074,18 @@ export default function HomePage() {
                 );
               })}
               {!sponsorVisibleModels.length && !isLoading ? (
-                <p className="text-sm text-gray-400">Run the benchmark to populate sponsor-level breakdown.</p>
+                <p className="text-sm text-stone-400">Run the benchmark to populate sponsor-level breakdown.</p>
               ) : null}
             </div>
           </Disclosure>
         </Card>
 
-        <Card className="space-y-5 border-white/15 bg-panel/95 p-6">
+        <Card className="space-y-5 border-[#4a4a46] bg-panel/95 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold">Model Deep Dive</h2>
-              <p className="text-sm text-gray-300">Pick one model and inspect all scenario-level tasks without page scrolling.</p>
+              <p className="text-sm text-stone-300">Select a model to inspect scenario-level task outcomes and sponsor metrics.</p>
             </div>
-            <Badge className="border-white/20 bg-white/10 text-white">1-click model navigation</Badge>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -1101,7 +1100,7 @@ export default function HomePage() {
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   activeModel === row.model
                     ? "border-accent bg-accent/15 text-white"
-                    : "border-white/20 bg-white/5 text-gray-200 hover:border-accent/45 hover:bg-accent/12"
+                    : "border-[#6b6b65] bg-[#2a2a28] text-stone-200 hover:border-accent/45 hover:bg-accent/12"
                 }`}
               >
                 {row.model} ({paramsLabel(row.paramsBillions)})
@@ -1111,25 +1110,25 @@ export default function HomePage() {
 
           <div className="grid gap-3 md:grid-cols-4">
             <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-400">Overall</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">Overall</p>
               <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.overallScore)}`}>
                 {metricLabel(activeModelRow?.overallScore)}
               </p>
             </Card>
             <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-400">Decision Accuracy</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">Decision Accuracy</p>
               <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.decisionAccuracyPct)}`}>
                 {metricLabel(activeModelRow?.decisionAccuracyPct, "%")}
               </p>
             </Card>
             <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-400">Workflow Success</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">Workflow Success</p>
               <p className={`text-2xl font-semibold ${toneForRate(activeModelRow?.workflowSuccessRatePct)}`}>
                 {metricLabel(activeModelRow?.workflowSuccessRatePct, "%")}
               </p>
             </Card>
             <Card className="space-y-1 bg-soft/55 p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-400">Avg Latency</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">Avg Latency</p>
               <p className="text-2xl font-semibold">{metricLabel(activeModelRow?.avgTotalLatencyMs, " ms")}</p>
             </Card>
           </div>
@@ -1137,7 +1136,7 @@ export default function HomePage() {
           <Disclosure title="Selected Model Sponsor View" subtitle="How this model performs by sponsor track" defaultOpen>
             <div className="overflow-x-auto">
               <table className="data-table min-w-full text-left text-sm">
-                <thead className="text-gray-300">
+                <thead className="text-stone-300">
                   <tr>
                     <th className="px-2 py-2">Sponsor</th>
                     <th className="px-2 py-2">Cases</th>
@@ -1169,7 +1168,7 @@ export default function HomePage() {
                 </thead>
                 <tbody>
                   {activeModelSponsorRows.map((row) => (
-                    <tr key={`${activeModel}-${row.sponsor}`} className="border-t border-white/10">
+                    <tr key={`${activeModel}-${row.sponsor}`} className="border-t border-[#4a4a46]">
                       <td className="px-2 py-2 font-medium">{row.sponsor}</td>
                       <td className="px-2 py-2">{row.cases}</td>
                       <td className="px-2 py-2">{metricLabel(row.decisionAccuracyPct)}</td>
@@ -1180,7 +1179,7 @@ export default function HomePage() {
                   ))}
                   {!activeModelSponsorRows.length ? (
                     <tr>
-                      <td className="px-2 py-3 text-gray-400" colSpan={6}>
+                      <td className="px-2 py-3 text-stone-400" colSpan={6}>
                         No sponsor breakdown for selected model yet.
                       </td>
                     </tr>
@@ -1198,14 +1197,14 @@ export default function HomePage() {
                 const scenario = scenarioById.get(row.caseId) || scenarioById.get(row.scenarioId);
                 const sponsors = caseSponsors(scenario, row.executionMode);
                 return (
-                  <Card key={`${row.model}-${row.caseId}`} className="border-white/15 bg-soft/55 p-4">
+                  <Card key={`${row.model}-${row.caseId}`} className="border-[#4a4a46] bg-soft/55 p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                      <Badge className="border-white/20 bg-white/10 text-white">{row.caseName}</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">{row.caseName}</Badge>
                       <Badge className={`border ${statusChipTone(row.workflow.status)}`}>{normalizeWorkflowStatus(row.workflow.status)}</Badge>
-                      <Badge className="border-white/20 bg-white/5 text-white">tasks passed: {passedCount}/{checklist.length}</Badge>
-                      <Badge className="border-white/20 bg-white/5 text-white">latency: {metricLabel(row.totalLatencyMs)} ms</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">tasks passed: {passedCount}/{checklist.length}</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#2a2a28] text-white">latency: {metricLabel(row.totalLatencyMs)} ms</Badge>
                       {sponsors.map((sponsor) => (
-                        <Badge key={`${row.caseId}-${sponsor}`} className="border-white/20 bg-white/5 text-white">
+                        <Badge key={`${row.caseId}-${sponsor}`} className="border-[#6b6b65] bg-[#2a2a28] text-white">
                           {sponsor}
                         </Badge>
                       ))}
@@ -1219,16 +1218,16 @@ export default function HomePage() {
                             task.passed ? "border-emerald-300/25 bg-emerald-300/10" : "border-rose-300/25 bg-rose-300/10"
                           }`}
                         >
-                          <p className="flex items-center gap-2 font-medium text-gray-100">
+                          <p className="flex items-center gap-2 font-medium text-stone-100">
                             {task.passed ? <CheckCircle2 size={14} className="text-emerald-200" /> : <XCircle size={14} className="text-rose-200" />}
                             {task.label}: {passLabel(task.passed)}
                           </p>
-                          <p className="mt-1 text-xs text-gray-100/90">{task.detail}</p>
+                          <p className="mt-1 text-xs text-stone-100/90">{task.detail}</p>
                         </div>
                       ))}
                     </div>
 
-                    <div className="mt-3 space-y-1 text-xs text-gray-400">
+                    <div className="mt-3 space-y-1 text-xs text-stone-400">
                       <p>Model reason: {row.llm.reason || "no reason text"}</p>
                       <p>Citation IDs: {joinList(row.llm.citations ?? [])}</p>
                       <p>Raw output preview: {row.llm.rawOutputPreview || "n/a"}</p>
@@ -1237,13 +1236,13 @@ export default function HomePage() {
                 );
               })}
               {!activeModelCaseRows.length && !isLoading ? (
-                <p className="text-sm text-gray-400">Run the benchmark to generate model-level task audit rows.</p>
+                <p className="text-sm text-stone-400">Run the benchmark to generate model-level task audit rows.</p>
               ) : null}
             </div>
           </Disclosure>
         </Card>
 
-        <Card className="space-y-4 border-white/15 bg-panel/95 p-6">
+        <Card className="space-y-4 border-[#4a4a46] bg-panel/95 p-6">
           <Disclosure title="Setup and Integration Requirements" subtitle="Explicit endpoint status and env template">
             <div className="space-y-4">
               {missingIntegrations.length > 0 ? (
@@ -1254,7 +1253,7 @@ export default function HomePage() {
                   </div>
                   <div className="mt-3 space-y-2 text-sm">
                     {missingIntegrations.map((item) => (
-                      <div key={item.integration} className="rounded-lg border border-amber-200/20 bg-black/15 px-3 py-2">
+                      <div key={item.integration} className="rounded-lg border border-amber-200/20 bg-[#2a2a28] px-3 py-2">
                         <p className="font-medium text-amber-50">{item.integration}</p>
                         <p className="text-amber-50/90">Required: {item.required}</p>
                         <p className="text-amber-50/80">Reason: {item.reason}</p>
@@ -1268,14 +1267,14 @@ export default function HomePage() {
 
               <Card className="bg-soft/55 p-4">
                 <p className="mb-2 text-sm font-semibold">Environment snippet</p>
-                <pre className="overflow-auto rounded-lg bg-black/25 p-3 text-[11px] leading-5 text-gray-100">{envSnippet}</pre>
+                <pre className="overflow-auto rounded-lg bg-[#2a2a28] p-3 text-[11px] leading-5 text-stone-100">{envSnippet}</pre>
               </Card>
             </div>
           </Disclosure>
 
           {runTechnicalLog ? (
             <Disclosure title="Technical Logs" subtitle="Raw run output for debugging">
-              <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-soft/60 p-3 text-[11px] leading-4 text-gray-200">
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-soft/60 p-3 text-[11px] leading-4 text-stone-200">
                 {runTechnicalLog}
               </pre>
             </Disclosure>

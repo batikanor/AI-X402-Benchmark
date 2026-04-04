@@ -9,12 +9,9 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 14% 12%, rgba(45, 212, 191, 0.16), transparent 38%),
-    radial-gradient(circle at 82% 10%, rgba(20, 184, 166, 0.12), transparent 34%),
-    linear-gradient(to bottom, #001f1e, #001613);
-  color: #f2f5f1;
-  font-family: "Sora", "Geist", "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  background: #2a2a28;
+  color: #f5f3eb;
+  font-family: "Inter", "DM Sans", "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 * {
@@ -22,16 +19,16 @@ body {
 }
 
 ::selection {
-  background: rgba(45, 212, 191, 0.22);
+  background: rgba(75, 104, 69, 0.35);
 }
 
 .data-table th {
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #a3b7b0;
+  color: #a1a096;
 }
 
 .data-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.03);
 }
