@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { fetchDashboard, runBenchmark } from "./api";
+import { fetchDashboard, fetchLlmDashboard, runBenchmark, runLlmBenchmark } from "./api";
 
 type MockResponse = {
   ok: boolean;
@@ -21,7 +21,28 @@ describe("x402 frontend api", () => {
   });
 
   it("fetchDashboard requests dashboard endpoint", async () => {
-    const payload = { project: { name: "x402", tagline: "t", sponsors: [] }, latest: null, scenarios: [] };
+    const payload = {
+      project: { name: "x402", tagline: "t", sponsors: [] },
+      benchmarkDefinition: {
+        workflow: {
+          name: "w",
+          whatIsBenchmarked: "w",
+          mocked: false,
+          scenarioCount: 0,
+          statusNote: "ok",
+          integrationStatus: {
+            isFullyConfigured: false,
+            hedera: { mode: "relay", configured: false, reason: "x" },
+            chainlink: { mode: "webhook", configured: false, reason: "x" },
+            ledger: { mode: "external_approver", configured: false, reason: "x" },
+            serviceProbe: { configured: false, reason: "x" },
+          },
+        },
+        llm: { name: "llm", whatIsBenchmarked: "llm", mocked: false },
+      },
+      latest: null,
+      scenarios: [],
+    };
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -34,6 +55,29 @@ describe("x402 frontend api", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toMatch(/\/api\/v1\/dashboard$/);
+    expect(options).toEqual({ cache: "no-store" });
+  });
+
+  it("fetchLlmDashboard requests llm dashboard endpoint", async () => {
+    const payload = {
+      track: { name: "llm", mocked: false, runtime: "local_ollama", suiteName: "s", suitePath: "p", tasks: [] },
+      availableModels: ["gemma4:e4b"],
+      recommendedModels: ["gemma4:e4b"],
+      latest: null,
+      models: [],
+    };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    } as MockResponse);
+
+    const result = await fetchLlmDashboard();
+
+    expect(result).toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/v1\/llm\/dashboard$/);
     expect(options).toEqual({ cache: "no-store" });
   });
 
@@ -56,6 +100,35 @@ describe("x402 frontend api", () => {
     expect(JSON.parse(String(options.body))).toEqual({ strict: true });
   });
 
+  it("runLlmBenchmark posts multi-model payload", async () => {
+    const payload = { ok: true, returnCode: 0, stdout: "done", stderr: "" };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    } as MockResponse);
+
+    const result = await runLlmBenchmark({
+      models: ["gemma4:e4b", "qwen3:4b-instruct"],
+      runsPerTask: 1,
+      maxTokens: 512,
+      temperature: 0.1,
+    });
+
+    expect(result).toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/v1\/llm\/runs$/);
+    expect(options.method).toBe("POST");
+    expect(options.headers).toEqual({ "Content-Type": "application/json" });
+    expect(JSON.parse(String(options.body))).toEqual({
+      models: ["gemma4:e4b", "qwen3:4b-instruct"],
+      runsPerTask: 1,
+      maxTokens: 512,
+      temperature: 0.1,
+    });
+  });
+
   it("fetchDashboard throws on non-2xx", async () => {
     fetchMock.mockResolvedValue({
       ok: false,
@@ -74,5 +147,23 @@ describe("x402 frontend api", () => {
     } as MockResponse);
 
     await expect(runBenchmark(false)).rejects.toThrow("Run request failed with status 500");
+  });
+
+  it("runLlmBenchmark throws on non-2xx", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => "bad input",
+      json: async () => ({}),
+    } as MockResponse & { text: () => Promise<string> });
+
+    await expect(
+      runLlmBenchmark({
+        models: ["gemma4:e4b"],
+        runsPerTask: 1,
+        maxTokens: 512,
+        temperature: 0.1,
+      }),
+    ).rejects.toThrow("LLM run request failed with status 422: bad input");
   });
 });

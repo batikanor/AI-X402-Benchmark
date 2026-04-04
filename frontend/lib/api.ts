@@ -1,10 +1,42 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
+export interface RunResponse {
+  ok: boolean;
+  returnCode: number;
+  stdout: string;
+  stderr: string;
+  runId?: string | null;
+  durationMs?: number;
+}
+
 export interface DashboardResponse {
   project: {
     name: string;
     tagline: string;
     sponsors: string[];
+  };
+  benchmarkDefinition: {
+    workflow: {
+      name: string;
+      whatIsBenchmarked: string;
+      mocked: boolean;
+      suiteId?: string | null;
+      suiteName?: string | null;
+      scenarioCount: number;
+      statusNote: string;
+      integrationStatus: {
+        isFullyConfigured: boolean;
+        hedera: { mode: string; configured: boolean; reason: string };
+        chainlink: { mode: string; configured: boolean; reason: string };
+        ledger: { mode: string; configured: boolean; reason: string };
+        serviceProbe: { configured: boolean; reason: string };
+      };
+    };
+    llm: {
+      name: string;
+      whatIsBenchmarked: string;
+      mocked: boolean;
+    };
   };
   latest: {
     runId: string;
@@ -33,6 +65,34 @@ export interface DashboardResponse {
   }>;
 }
 
+export interface LlmDashboardResponse {
+  track: {
+    name: string;
+    mocked: boolean;
+    runtime: string;
+    suiteName: string;
+    suitePath: string;
+    tasks: Array<{ id: string; name: string }>;
+  };
+  availableModels: string[];
+  recommendedModels: string[];
+  latest: {
+    runId: string;
+    startedAt: string;
+    finishedAt: string;
+    taskCount: number;
+    runsPerTask: number;
+    models: string[];
+  } | null;
+  models: Array<{
+    model: string;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+    avgCoveragePct: number;
+    successRatePct: number;
+  }>;
+}
+
 export async function fetchDashboard(): Promise<DashboardResponse> {
   const response = await fetch(`${API_BASE}/api/v1/dashboard`, { cache: "no-store" });
   if (!response.ok) {
@@ -41,7 +101,15 @@ export async function fetchDashboard(): Promise<DashboardResponse> {
   return (await response.json()) as DashboardResponse;
 }
 
-export async function runBenchmark(strict: boolean): Promise<{ ok: boolean; returnCode: number; stdout: string; stderr: string }> {
+export async function fetchLlmDashboard(): Promise<LlmDashboardResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/llm/dashboard`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`LLM dashboard request failed with status ${response.status}`);
+  }
+  return (await response.json()) as LlmDashboardResponse;
+}
+
+export async function runBenchmark(strict: boolean): Promise<RunResponse> {
   const response = await fetch(`${API_BASE}/api/v1/runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -50,5 +118,23 @@ export async function runBenchmark(strict: boolean): Promise<{ ok: boolean; retu
   if (!response.ok) {
     throw new Error(`Run request failed with status ${response.status}`);
   }
-  return (await response.json()) as { ok: boolean; returnCode: number; stdout: string; stderr: string };
+  return (await response.json()) as RunResponse;
+}
+
+export async function runLlmBenchmark(input: {
+  models: string[];
+  runsPerTask: number;
+  maxTokens: number;
+  temperature: number;
+}): Promise<RunResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/llm/runs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`LLM run request failed with status ${response.status}: ${message}`);
+  }
+  return (await response.json()) as RunResponse;
 }
