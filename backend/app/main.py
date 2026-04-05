@@ -315,7 +315,7 @@ def _integration_status(config: dict[str, Any]) -> dict[str, Any]:
         "chainlink": {
             "mode": chainlink_mode,
             "configured": chainlink_configured,
-            "reason": "ready" if chainlink_configured else ("cli mode selected" if chainlink_mode == "cli" else "set CHAINLINK_WEBHOOK_URL"),
+            "reason": "ready" if chainlink_configured else ("CRE CLI mode selected (set CHAINLINK_CLI_PATH/CHAINLINK_CRE_ACTION)" if chainlink_mode == "cli" else "set CHAINLINK_WEBHOOK_URL"),
         },
         "ledger": {
             "mode": ledger_mode,

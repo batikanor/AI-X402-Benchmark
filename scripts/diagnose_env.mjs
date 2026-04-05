@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -90,6 +91,21 @@ function queueManualRequests(lines) {
   if (append) fs.appendFileSync(MANUAL_QUEUE_PATH, append, 'utf8');
 }
 
+function checkCliBinary(command) {
+  const cmd = String(command || '').trim();
+  if (!cmd) return { ok: false, detail: 'empty command' };
+  const result = spawnSync(cmd, ['--version'], { encoding: 'utf8', timeout: 5000 });
+  if (result.error) {
+    return { ok: false, detail: result.error.message };
+  }
+  if (typeof result.status === 'number' && result.status !== 0) {
+    const detail = String(result.stderr || result.stdout || '').trim();
+    return { ok: false, detail: detail || `exit status ${result.status}` };
+  }
+  const version = String(result.stdout || result.stderr || '').trim().split(/\r?\n/, 1)[0];
+  return { ok: true, detail: version || 'available' };
+}
+
 async function main() {
   const env = loadEnvMerged();
 
@@ -112,6 +128,7 @@ async function main() {
     required.push({ key: 'CHAINLINK_WEBHOOK_URL', reason: 'Chainlink workflow webhook endpoint' });
   } else {
     required.push({ key: 'CHAINLINK_CLI_PATH', reason: 'Chainlink CLI binary path for cli mode' });
+    required.push({ key: 'CHAINLINK_CRE_ACTION', reason: 'CRE action: simulate or deploy' });
   }
 
   if (ledgerMode === 'external_approver') {
@@ -142,6 +159,29 @@ async function main() {
       endpointChecks.push({ name: 'chainlink_webhook', url: env.CHAINLINK_WEBHOOK_URL, ...res });
     } catch (error) {
       endpointChecks.push({ name: 'chainlink_webhook', url: env.CHAINLINK_WEBHOOK_URL, ok: false, status: null, body: String(error?.message || error) });
+    }
+  }
+
+  if (chainlinkMode === 'cli') {
+    const cliPath = env.CHAINLINK_CLI_PATH || 'cre';
+    const cliCheck = checkCliBinary(cliPath);
+    endpointChecks.push({
+      name: 'chainlink_cre_cli',
+      url: cliPath,
+      ok: cliCheck.ok,
+      status: cliCheck.ok ? 0 : null,
+      body: cliCheck.detail,
+    });
+
+    const action = String(env.CHAINLINK_CRE_ACTION || 'simulate').toLowerCase().trim();
+    if (!['simulate', 'deploy'].includes(action)) {
+      endpointChecks.push({
+        name: 'chainlink_cre_action',
+        url: action,
+        ok: false,
+        status: null,
+        body: 'CHAINLINK_CRE_ACTION must be simulate or deploy',
+      });
     }
   }
 

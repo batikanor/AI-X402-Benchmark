@@ -77,6 +77,21 @@ Challenge definitions are displayed in the UI and sourced from:
 
 Important: ETHGlobal pages are used for challenge mapping only. The benchmark docs-grounding pack uses official protocol docs, not ETHGlobal content.
 
+## Chainlink CRE-aligned execution profile
+
+This branch adds a Chainlink-first profile that runs orchestration through CRE tooling instead of local-only webhook simulation.
+
+Official references used for alignment:
+- [ETHGlobal Chainlink sponsor page (Cannes 2026)](https://ethglobal.com/events/cannes2026/prizes/chainlink)
+- [Chainlink CRE docs](https://docs.chain.link/cre)
+- [Chainlink Automation best practices](https://docs.chain.link/chainlink-automation/concepts/best-practice)
+
+Implementation details:
+- CRE adapter supports `simulate` and `deploy` actions in CLI mode.
+- CLI command path and action are explicit via env/config (`CHAINLINK_CLI_PATH`, `CHAINLINK_CRE_ACTION`).
+- Benchmark trace now records the effective CLI command in `workflow.trace[].endpoint` for evidence.
+- Dedicated benchmark config for this mode: [`config/benchmark.chainlink-cre.config.json`](./config/benchmark.chainlink-cre.config.json)
+
 ## Documentation-grounding sources (official)
 
 Default docs pack is built from:
@@ -166,7 +181,7 @@ cp .env.example .env
 Set required values in `.env`.
 At minimum for local/dev operation:
 - Hedera operator credentials (SDK mode) or relay URL
-- Chainlink webhook URL (or use API fallback wiring)
+- Chainlink CRE CLI (`CHAINLINK_MODE=cli`, `CHAINLINK_CLI_PATH`, `CHAINLINK_CRE_ACTION`) or webhook URL
 - Ledger approver URL (or use API fallback wiring)
 
 For hosted readiness runs (recommended):
@@ -204,6 +219,18 @@ npm run docs:build
 
 ```bash
 npm run readiness:bench
+```
+
+Chainlink CRE profile (simulate):
+
+```bash
+npm run readiness:bench:chainlink-cre
+```
+
+Chainlink CRE profile (deploy):
+
+```bash
+npm run readiness:bench:chainlink-cre:deploy
 ```
 
 Optional explicit mode override:

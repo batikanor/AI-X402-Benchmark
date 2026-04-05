@@ -1,7 +1,7 @@
 {
   "suite": {
     "id": "x402bench-cannes",
-    "name": "x402Bench Payment Reliability Benchmark",
+    "name": "x402Bench Payment Reliability Benchmark (Chainlink CRE profile)",
     "minPassingScore": 75
   },
   "defaultRetryPolicy": {
@@ -24,8 +24,7 @@
     "chainlink": {
       "mode": "cli",
       "cliPath": "cre",
-      "cliAction": "simulate",
-      "webhookUrl": ""
+      "cliAction": "simulate"
     },
     "ledger": {
       "mode": "external_approver",
