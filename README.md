@@ -15,6 +15,41 @@ Current benchmark suite:
 - Release tag: `2026.1`
 - Cases: `12` total (`7` real execution + `5` decision-only)
 
+## Latest benchmark output (pinned)
+
+This section is a direct copy of the newest benchmark artifact in [`readiness_bench/results/`](./readiness_bench/results/).
+
+Run metadata:
+- Run ID: `x402-readiness-20260405062330-2f907119`
+- Source file: `readiness_bench/results/x402-readiness-20260405062330-2f907119.json`
+- Started: `2026-04-05T06:23:30.997Z`
+- Finished: `2026-04-05T06:32:19.120Z`
+- Runtime: `openai_compat` (OpenRouter/OpenAI-compatible)
+- Models: `6`
+- Total evaluations: `144` (`12 cases × 2 doc modes × 6 models`)
+
+### Model scores (with docs context)
+
+| Rank | Model | Overall | Policy Quality % | Strict Match % | Required Docs Coverage % | Gate Eligible % | Executed Pass % | Mean E2E Latency (ms) |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | `openai/gpt-5.4-mini` | 54.81 | 73.37 | 8.33 | 0.00 | 8.33 | 0.00 | 1227.10 |
+| 2 | `meta-llama/llama-3.1-8b-instruct` | 54.18 | 70.35 | 33.33 | 0.00 | 33.33 | 0.00 | 3557.42 |
+| 3 | `openai/gpt-5.4-nano` | 52.64 | 70.35 | 16.67 | 5.56 | 16.67 | 0.00 | 1672.55 |
+| 4 | `google/gemma-2-9b-it` | 50.15 | 67.28 | 16.67 | 0.00 | 16.67 | 0.00 | 1543.30 |
+| 5 | `qwen/qwen3-8b` | 44.02 | 60.35 | 16.67 | 0.00 | 16.67 | 0.00 | 11812.83 |
+| 6 | `qwen/qwen2.5-coder-7b-instruct` | 2.86 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 1496.69 |
+
+### Model scores (without docs context)
+
+| Rank | Model | Overall | Policy Quality % | Strict Match % | Required Docs Coverage % | Gate Eligible % | Executed Pass % | Mean E2E Latency (ms) |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | `qwen/qwen3-8b` | 63.67 | 86.25 | 33.33 | 0.00 | 33.33 | 0.00 | 11153.67 |
+| 2 | `google/gemma-2-9b-it` | 60.82 | 81.80 | 33.33 | 0.00 | 41.67 | 0.00 | 2165.92 |
+| 3 | `openai/gpt-5.4-mini` | 59.95 | 82.17 | 16.67 | 0.00 | 16.67 | 0.00 | 1245.25 |
+| 4 | `meta-llama/llama-3.1-8b-instruct` | 57.12 | 74.81 | 25.00 | 0.00 | 25.00 | 0.00 | 1857.98 |
+| 5 | `openai/gpt-5.4-nano` | 52.29 | 72.53 | 8.33 | 0.00 | 25.00 | 0.00 | 1822.07 |
+| 6 | `qwen/qwen2.5-coder-7b-instruct` | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 3199.91 |
+
 ## Why this exists
 
 Hackathon demos often show a single happy-path payment.
