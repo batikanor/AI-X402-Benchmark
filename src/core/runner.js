@@ -4,11 +4,50 @@ import { HederaAdapter } from "../adapters/hederaAdapter.js";
 import { ChainlinkCreAdapter } from "../adapters/chainlinkCreAdapter.js";
 import { LedgerPolicyAdapter } from "../adapters/ledgerPolicyAdapter.js";
 import { ServiceProbe } from "../adapters/serviceProbe.js";
+import { getEnv } from "../utils/env.js";
 import { summarizeRun } from "./metrics.js";
 import { scoreBenchmark } from "./scoring.js";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parsePositiveNumber(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function roundHbar(value) {
+  return Math.round(value * 1e8) / 1e8;
+}
+
+function resolveSettlementPayment(payment) {
+  const baseAmount = parsePositiveNumber(payment?.amountHbar) ?? 1;
+  const overrideRaw = String(getEnv("X402BENCH_SETTLEMENT_HBAR_OVERRIDE", "") || "").trim();
+  const multiplier = parsePositiveNumber(getEnv("X402BENCH_SETTLEMENT_HBAR_MULTIPLIER", "1")) ?? 1;
+  const minAmount = parsePositiveNumber(getEnv("X402BENCH_SETTLEMENT_HBAR_MIN", "0.0001")) ?? 0.0001;
+  const maxAmount = parsePositiveNumber(getEnv("X402BENCH_SETTLEMENT_HBAR_MAX", "")) ?? Number.POSITIVE_INFINITY;
+
+  const overrideAmount = overrideRaw ? parsePositiveNumber(overrideRaw) : null;
+  const rawEffective = overrideAmount ?? (baseAmount * multiplier);
+  const effectiveAmount = roundHbar(clamp(rawEffective, minAmount, maxAmount));
+
+  return {
+    payment: {
+      ...payment,
+      amountHbar: effectiveAmount,
+    },
+    baseAmount,
+    effectiveAmount,
+    mode: overrideAmount
+      ? "override"
+      : (multiplier !== 1 ? "multiplier" : "base"),
+  };
 }
 
 async function withRetry(fn, retryCount, retryDelayMs, logger, contextLabel) {
@@ -322,13 +361,19 @@ export class BenchmarkRunner {
         status: "running",
         detail: "Submitting settlement to Hedera."
       });
+      const effectiveSettlement = resolveSettlementPayment(scenario.payment);
+      if (effectiveSettlement.effectiveAmount !== effectiveSettlement.baseAmount) {
+        notes.push(
+          `Settlement HBAR adjusted (${effectiveSettlement.mode}): ${effectiveSettlement.baseAmount} -> ${effectiveSettlement.effectiveAmount}`
+        );
+      }
       let hederaExec;
       try {
         hederaExec = await withRetry(
           () => this.hedera.executePayment({
             scenarioId: scenario.id,
             runId,
-            payment: scenario.payment
+            payment: effectiveSettlement.payment
           }),
           retryPolicy.retries,
           retryPolicy.delayMs,
@@ -355,7 +400,7 @@ export class BenchmarkRunner {
         retriesUsed: hederaExec.retriesUsed,
         mode: hederaExec.value.mode || null,
         endpoint: hederaExec.value.endpoint || null,
-        detail: `txHash: ${txHash || "n/a"}`
+        detail: `txHash: ${txHash || "n/a"} | amountHbar: ${effectiveSettlement.payment.amountHbar}`
       });
 
       const probeStart = process.hrtime.bigint();
