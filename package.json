@@ -22,6 +22,7 @@
     "llm:bench:duel": "node scripts/run_ollama_llm_benchmark.mjs --suite llm_bench/suite.json --models gemma4:e4b,qwen3:4b-instruct --outdir llm_bench/results",
     "readiness:bench": "node scripts/run_llm_readiness_benchmark.mjs --config config/benchmark.config.json --suite readiness_bench/suite.json --runtime ollama --models qwen3:4b-instruct,phi4:14b,gemma3:12b-it-qat,qwen2.5:0.5b,gemma4:e4b --outdir readiness_bench/results",
     "readiness:bench:wide": "node scripts/run_llm_readiness_benchmark.mjs --config config/benchmark.config.json --suite readiness_bench/suite.json --runtime ollama --models qwen3:4b-instruct,phi4:14b,gemma3:12b-it-qat,deepseek-r1:14b,qwen2.5:0.5b,gemma4:e4b --outdir readiness_bench/results",
+    "readiness:bench:openai-cheap": "node scripts/run_llm_readiness_benchmark.mjs --config config/benchmark.config.json --suite readiness_bench/suite.json --runtime openai_compat --api-base-url https://api.openai.com/v1 --api-key-env OPENAI_API_KEY --models gpt-5.4-mini,gpt-5.4-nano --outdir readiness_bench/results",
     "readiness:bench:hf": "node scripts/run_llm_readiness_benchmark.mjs --config config/benchmark.config.json --suite readiness_bench/suite.json --runtime openai_compat --api-base-url https://router.huggingface.co/v1 --api-key-env HF_TOKEN --models Qwen/Qwen3-4B-Instruct,google/gemma-3-4b-it --outdir readiness_bench/results"
   },
   "engines": {

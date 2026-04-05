@@ -718,32 +718,62 @@ async function callOpenAICompat({ model, prompt, maxTokens, temperature, apiBase
   const key = resolveOpenAICompatApiKey(apiKeyEnv);
 
   const endpoint = `${baseUrl}/chat/completions`;
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${key}`,
+  const headers = {
+    'content-type': 'application/json',
+    authorization: `Bearer ${key}`,
+  };
+  const messages = [
+    {
+      role: 'system',
+      content: 'You output strict JSON only. No markdown.',
     },
-    body: JSON.stringify({
-      model,
-      temperature,
-      max_tokens: maxTokens,
-      messages: [
-        {
-          role: 'system',
-          content: 'You output strict JSON only. No markdown.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    }),
+    {
+      role: 'user',
+      content: prompt,
+    },
+  ];
+
+  const payloadWithMaxTokens = {
+    model,
+    temperature,
+    max_tokens: maxTokens,
+    messages,
+  };
+
+  let response = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payloadWithMaxTokens),
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI-compatible error ${response.status}: ${body}`);
+    const firstBody = await response.text();
+    const bodyText = String(firstBody || '');
+    const shouldRetryWithMaxCompletionTokens = response.status === 400
+      && bodyText.toLowerCase().includes('max_tokens')
+      && bodyText.toLowerCase().includes('max_completion_tokens');
+
+    if (shouldRetryWithMaxCompletionTokens) {
+      const payloadWithMaxCompletionTokens = {
+        model,
+        temperature,
+        max_completion_tokens: maxTokens,
+        messages,
+      };
+
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payloadWithMaxCompletionTokens),
+      });
+
+      if (!response.ok) {
+        const retryBody = await response.text();
+        throw new Error(`OpenAI-compatible error ${response.status}: ${retryBody}`);
+      }
+    } else {
+      throw new Error(`OpenAI-compatible error ${response.status}: ${firstBody}`);
+    }
   }
 
   const payload = await response.json();

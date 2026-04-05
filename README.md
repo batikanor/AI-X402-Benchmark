@@ -137,6 +137,10 @@ At minimum for local/dev operation:
 - Chainlink webhook URL (or use API fallback wiring)
 - Ledger approver URL (or use API fallback wiring)
 
+For OpenAI-hosted readiness runs:
+- `OPENAI_API_KEY` (required)
+- `OPENAI_BASE_URL=https://api.openai.com/v1` (recommended explicit default)
+
 Run env diagnostics:
 
 ```bash
@@ -180,6 +184,18 @@ Hosted OpenAI-compatible endpoint (HF Router example):
 export HF_TOKEN=hf_xxx
 npm run readiness:bench:hf
 ```
+
+Official OpenAI cheap mini/nano run:
+
+```bash
+# requires OPENAI_API_KEY in .env
+npm run readiness:bench:openai-cheap
+```
+
+Latest mini/nano model IDs are discovered from your account via `/v1/models`.
+As of April 5, 2026 in this workspace account they are:
+- `gpt-5.4-mini`
+- `gpt-5.4-nano`
 
 ### 5) Start backend + frontend (stable demo mode)
 

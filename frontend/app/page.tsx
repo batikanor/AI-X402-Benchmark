@@ -531,7 +531,7 @@ export default function HomePage() {
   const [runtime, setRuntime] = useState<RuntimeMode>("ollama");
   const [customModels, setCustomModels] = useState("");
   const [apiBaseUrl, setApiBaseUrl] = useState("");
-  const [apiKeyEnv, setApiKeyEnv] = useState("HF_TOKEN");
+  const [apiKeyEnv, setApiKeyEnv] = useState("OPENAI_API_KEY");
   const [docsPackPath, setDocsPackPath] = useState("");
   const [docsTopK, setDocsTopK] = useState(5);
   const [requireCitations, setRequireCitations] = useState(true);
@@ -1316,7 +1316,7 @@ export default function HomePage() {
                       id="api-key-env"
                       value={apiKeyEnv}
                       onChange={(event) => setApiKeyEnv(event.target.value.toUpperCase())}
-                      placeholder="HF_TOKEN"
+                      placeholder="OPENAI_API_KEY"
                       className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                     />
                   </div>
