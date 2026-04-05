@@ -1,0 +1,56 @@
+{
+  "latestFile": "x402-readiness-20260405043456-5e97e31d.json",
+  "runId": "x402-readiness-20260405043456-5e97e31d",
+  "models": [
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "qwen3:4b-instruct",
+    "qwen2.5:0.5b"
+  ],
+  "modes": [
+    "with_docs",
+    "without_docs"
+  ],
+  "withDocsTop": {
+    "model": "qwen3:4b-instruct",
+    "overallScore": 60.05,
+    "decisionAccuracyPct": 88.13,
+    "basePolicyAccuracyPct": 81.25,
+    "controlsF1Pct": 95.56,
+    "parseRatePct": 100,
+    "fullMatchRatePct": 0,
+    "docsGroundingRatePct": 0,
+    "citationValidityPct": 83.33,
+    "requiredSourceCoveragePct": 6.94,
+    "executionEligibilityPct": 33.33,
+    "workflowSuccessRatePct": 100,
+    "executedScenarios": 4,
+    "successfulExecutions": 4,
+    "failedExecutions": 0,
+    "avgTotalLatencyMs": 35514.81,
+    "p95TotalLatencyMs": 39036.7,
+    "totalEvaluations": 12,
+    "expectedEvaluations": 12
+  },
+  "withoutDocsTop": {
+    "model": "qwen3:4b-instruct",
+    "overallScore": 77.18,
+    "decisionAccuracyPct": 83.27,
+    "basePolicyAccuracyPct": 81.25,
+    "controlsF1Pct": 81.67,
+    "parseRatePct": 100,
+    "fullMatchRatePct": 41.67,
+    "docsGroundingRatePct": 100,
+    "citationValidityPct": 0,
+    "requiredSourceCoveragePct": 0,
+    "executionEligibilityPct": 16.67,
+    "workflowSuccessRatePct": 100,
+    "executedScenarios": 2,
+    "successfulExecutions": 2,
+    "failedExecutions": 0,
+    "avgTotalLatencyMs": 3367.09,
+    "p95TotalLatencyMs": 5323.18,
+    "totalEvaluations": 12,
+    "expectedEvaluations": 12
+  }
+}

@@ -313,7 +313,25 @@ export interface ReadinessDashboardResponse {
       txHash: string | null;
       workflowId: string | null;
       durationMs: number;
+      durationBreakdownMs?: {
+        ledger?: number;
+        chainlink?: number;
+        hedera?: number;
+        serviceProbe?: number;
+        total?: number;
+      };
       notes: string[];
+      trace?: Array<{
+        id: string;
+        label: string;
+        attempted: boolean;
+        status: string;
+        durationMs: number;
+        retriesUsed: number;
+        mode?: string | null;
+        endpoint?: string | null;
+        detail?: string | null;
+      }>;
     };
     totalLatencyMs: number;
   }>;
@@ -324,8 +342,19 @@ export interface ReadinessDashboardResponse {
     representativeRationale?: string;
     payment: {
       amountUsd: number;
+      amountHbar?: number;
+      recipientAccountId?: string;
       destinationCountry: string;
     };
+    workflowInput?: {
+      service?: string;
+      priority?: string;
+    };
+    retryPolicy?: {
+      retries?: number;
+      delayMs?: number;
+    };
+    context?: Record<string, string | number | boolean>;
     expected: {
       decision: string;
       approvalRequired: boolean;

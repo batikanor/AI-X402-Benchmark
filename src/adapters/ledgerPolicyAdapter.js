@@ -83,7 +83,9 @@ export class LedgerPolicyAdapter {
     return {
       approved: Boolean(payload.approved),
       approverRef: payload.approverRef || payload.approvalId || null,
-      details: payload
+      details: payload,
+      mode: "external_approver",
+      endpoint: approverUrl
     };
   }
 
@@ -109,6 +111,8 @@ export class LedgerPolicyAdapter {
       return {
         approved: true,
         approverRef: address.address,
+        mode: "ledger_hw",
+        endpoint: "ledger-hw-usb",
         details: {
           signature
         }

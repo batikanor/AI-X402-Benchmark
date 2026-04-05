@@ -60,6 +60,7 @@ export class ChainlinkCreAdapter {
       workflowId: `${runId}-${scenarioId}`,
       status: "simulated",
       mode: "cli",
+      endpoint: command,
       durationMs,
       output: out.trim()
     };
@@ -99,6 +100,7 @@ export class ChainlinkCreAdapter {
       workflowId: payload.workflowId || `${runId}-${scenarioId}`,
       status: payload.status || "completed",
       mode: "webhook",
+      endpoint: webhookUrl,
       durationMs,
       output: payload
     };

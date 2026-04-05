@@ -241,6 +241,7 @@ Open:
 UI behavior:
 - Model input is manual CSV only.
 - On page load, manual model list auto-seeds from the latest benchmark run models shown in the dashboard.
+- Sponsor challenge map includes a `Case Flow Visualizer`: click representative sponsor/case-type rows to inspect case inputs, scoring formulas, gate status, and per-stage attempted/skipped call traces.
 
 `ui:health` validates that the HTML and linked CSS both return `200` so you do not get an unstyled page.
 
@@ -256,9 +257,18 @@ Readiness run outputs:
 - `readiness_bench/results/<runId>.json`
 - `readiness_bench/results/<runId>.md`
 
+Each readiness case row in JSON includes:
+- `workflow.trace[]` (`attempted`, `status`, `durationMs`, `retriesUsed`, `mode`, `endpoint`, `detail`)
+- `workflow.durationBreakdownMs` (`ledger`, `chainlink`, `hedera`, `serviceProbe`, `total`)
+
 Workflow benchmark outputs:
 - `reports/<runId>.json`
 - `reports/<runId>.md`
+
+Pitch deck assets:
+- `pitches/x402Bench_Cannes2026_Judge_Story.pptx`
+- `pitches/x402Bench_Cannes2026_Technical_DeepDive.pptx`
+- deck generator: `pitches/build_pitch_decks.cjs`
 
 ## Project layout
 

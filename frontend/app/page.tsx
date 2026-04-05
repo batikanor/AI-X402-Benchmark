@@ -183,6 +183,19 @@ type MethodologyExampleRow = {
   mappedChallenges: string[];
   rationale: string;
   present: boolean;
+  scenario: ReadinessScenario | null;
+};
+
+type WorkflowTraceStep = {
+  id: string;
+  label: string;
+  attempted: boolean;
+  status: string;
+  durationMs: number;
+  retriesUsed: number;
+  mode?: string | null;
+  endpoint?: string | null;
+  detail?: string | null;
 };
 
 type MetricHeaderProps = {
@@ -396,6 +409,113 @@ function executionGateFailureDetail(result: ReadinessResult): string {
   return `Gate failed because ${failures.map((item) => mapping[item] ?? item).join("; ")}.`;
 }
 
+function methodologyCaseKey(row: MethodologyExampleRow): string {
+  return `${row.sponsor}::${row.caseType}`;
+}
+
+function methodologyResultKey(row: ReadinessResult): string {
+  return `${row.model}::${resolveResultDocMode(row)}`;
+}
+
+function resolveResultDocMode(row: ReadinessResult): DocMode {
+  return (row.docMode ?? (row.docs?.enabled ? "with_docs" : "without_docs")) as DocMode;
+}
+
+function traceStatusTone(status: string): string {
+  const normalized = String(status || "").toLowerCase();
+  if (["success", "passed", "approved", "ok"].includes(normalized)) return "text-emerald-300";
+  if (["failed", "rejected"].includes(normalized)) return "text-rose-300";
+  if (["skipped", "not_required", "blocked"].includes(normalized)) return "text-amber-200";
+  return "text-stone-200";
+}
+
+function ensureWorkflowTrace(result: ReadinessResult): WorkflowTraceStep[] {
+  const declared = Array.isArray(result.workflow.trace) ? (result.workflow.trace as WorkflowTraceStep[]) : [];
+  if (declared.length) return declared;
+
+  const fallbackDetail = result.workflow.executed
+    ? "Detailed per-stage trace not available in this older run artifact."
+    : executionGateFailureDetail(result);
+
+  const steps: WorkflowTraceStep[] = [
+    {
+      id: "ledger_policy",
+      label: "Ledger policy pre-check",
+      attempted: result.workflow.executed,
+      status: result.workflow.executed ? "unknown" : "skipped",
+      durationMs: 0,
+      retriesUsed: 0,
+      mode: "local_policy",
+      endpoint: "local-policy-engine",
+      detail: fallbackDetail,
+    },
+    {
+      id: "ledger_approval",
+      label: "Ledger approval check",
+      attempted: result.workflow.executed && Boolean(result.expected.approvalRequired),
+      status: result.workflow.executed
+        ? result.expected.approvalRequired
+          ? "unknown"
+          : "not_required"
+        : "skipped",
+      durationMs: 0,
+      retriesUsed: 0,
+      detail: fallbackDetail,
+    },
+    {
+      id: "chainlink_workflow",
+      label: "Chainlink workflow orchestration",
+      attempted: result.workflow.executed,
+      status: result.workflow.executed ? "unknown" : "skipped",
+      durationMs: 0,
+      retriesUsed: result.workflow.retryCount ?? 0,
+      detail: fallbackDetail,
+    },
+    {
+      id: "hedera_settlement",
+      label: "Hedera settlement",
+      attempted: result.workflow.executed,
+      status: result.workflow.executed ? "unknown" : "skipped",
+      durationMs: 0,
+      retriesUsed: 0,
+      detail: fallbackDetail,
+    },
+    {
+      id: "service_probe",
+      label: "Service probe",
+      attempted: result.workflow.executed,
+      status: result.workflow.executed
+        ? normalizeWorkflowStatus(result.workflow.status) === "success"
+          ? "success"
+          : "unknown"
+        : "skipped",
+      durationMs: 0,
+      retriesUsed: 0,
+      detail: fallbackDetail,
+    },
+  ];
+  return steps;
+}
+
+function traceMeasurementFocus(stepId: string): string {
+  if (stepId === "ledger_policy") {
+    return "Policy threshold/sanctions check latency and allow/block correctness before any external call.";
+  }
+  if (stepId === "ledger_approval") {
+    return "High-value approval path behavior (required/optional), approver response, and signer integration health.";
+  }
+  if (stepId === "chainlink_workflow") {
+    return "Workflow orchestration call success, retries, and endpoint reliability.";
+  }
+  if (stepId === "hedera_settlement") {
+    return "On-chain settlement submission success and transaction hash return path.";
+  }
+  if (stepId === "service_probe") {
+    return "Post-settlement downstream validation endpoint behavior and response consistency.";
+  }
+  return "Operational stage signal.";
+}
+
 function buildHumanTaskChecklist(result: ReadinessResult): HumanTask[] {
   const expectedControls = result.expected.requiredControls ?? [];
   const modelControls = result.llm.requiredControls ?? [];
@@ -512,6 +632,8 @@ export default function HomePage() {
   const [activeModel, setActiveModel] = useState("");
   const [analysisDocMode, setAnalysisDocMode] = useState<DocMode>("with_docs");
   const [sponsorShowAllModels, setSponsorShowAllModels] = useState(false);
+  const [activeMethodologyCase, setActiveMethodologyCase] = useState("");
+  const [activeMethodologyResult, setActiveMethodologyResult] = useState("");
 
   useEffect(() => {
     if (runtime !== "openai_compat") return;
@@ -932,6 +1054,7 @@ export default function HomePage() {
             mappedChallenges: [],
             rationale: "Add a scenario mapped to this sponsor/case-type pair if you want this cell benchmarked.",
             present: false,
+            scenario: null,
           });
           continue;
         }
@@ -950,12 +1073,69 @@ export default function HomePage() {
           mappedChallenges,
           rationale: String(scenario.representativeRationale || "No representative rationale provided in suite."),
           present: true,
+          scenario,
         });
       }
     }
 
     return rows;
   }, [data?.scenarios]);
+
+  const presentMethodologyRows = useMemo(
+    () => methodologyExampleRows.filter((row) => row.present),
+    [methodologyExampleRows],
+  );
+
+  useEffect(() => {
+    if (!presentMethodologyRows.length) {
+      setActiveMethodologyCase("");
+      return;
+    }
+    if (!activeMethodologyCase || !presentMethodologyRows.some((row) => methodologyCaseKey(row) === activeMethodologyCase)) {
+      setActiveMethodologyCase(methodologyCaseKey(presentMethodologyRows[0]));
+    }
+  }, [presentMethodologyRows, activeMethodologyCase]);
+
+  const selectedMethodologyRow = useMemo(() => {
+    if (!methodologyExampleRows.length) return null;
+    const selected = methodologyExampleRows.find((row) => methodologyCaseKey(row) === activeMethodologyCase);
+    if (selected?.present) return selected;
+    return presentMethodologyRows[0] ?? methodologyExampleRows[0] ?? null;
+  }, [methodologyExampleRows, presentMethodologyRows, activeMethodologyCase]);
+
+  const selectedMethodologyResultRows = useMemo(() => {
+    if (!selectedMethodologyRow?.present) return [];
+    return latestResultRows
+      .filter((row) => row.caseId === selectedMethodologyRow.caseId)
+      .sort((a, b) => {
+        if (a.model !== b.model) return a.model.localeCompare(b.model);
+        return resolveResultDocMode(a).localeCompare(resolveResultDocMode(b));
+      });
+  }, [latestResultRows, selectedMethodologyRow]);
+
+  useEffect(() => {
+    if (!selectedMethodologyResultRows.length) {
+      setActiveMethodologyResult("");
+      return;
+    }
+    const preferred = selectedMethodologyResultRows.find(
+      (row) => row.model === activeModel && resolveResultDocMode(row) === analysisDocMode,
+    );
+    const defaultKey = methodologyResultKey(preferred ?? selectedMethodologyResultRows[0]);
+    if (!activeMethodologyResult || !selectedMethodologyResultRows.some((row) => methodologyResultKey(row) === activeMethodologyResult)) {
+      setActiveMethodologyResult(defaultKey);
+    }
+  }, [selectedMethodologyResultRows, activeMethodologyResult, activeModel, analysisDocMode]);
+
+  const selectedMethodologyResultRow = useMemo(() => {
+    if (!selectedMethodologyResultRows.length) return null;
+    return selectedMethodologyResultRows.find((row) => methodologyResultKey(row) === activeMethodologyResult) ?? selectedMethodologyResultRows[0];
+  }, [selectedMethodologyResultRows, activeMethodologyResult]);
+
+  const selectedMethodologyTrace = useMemo(
+    () => (selectedMethodologyResultRow ? ensureWorkflowTrace(selectedMethodologyResultRow) : []),
+    [selectedMethodologyResultRow],
+  );
 
   const activeModelCaseRows = useMemo(() => {
     return activeModeResultRows
@@ -1187,11 +1367,19 @@ export default function HomePage() {
                         <th className="px-2 py-2">Mapped Challenge(s)</th>
                         <th className="px-2 py-2">Why this case exists</th>
                         <th className="px-2 py-2">How scored</th>
+                        <th className="px-2 py-2">Visualize</th>
                       </tr>
                     </thead>
                     <tbody>
                       {methodologyExampleRows.map((row) => (
-                        <tr key={`method-${row.sponsor}-${row.caseType}`} className="border-t border-[#4a4a46]">
+                        <tr
+                          key={`method-${row.sponsor}-${row.caseType}`}
+                          className={`border-t border-[#4a4a46] ${
+                            row.present && selectedMethodologyRow && methodologyCaseKey(selectedMethodologyRow) === methodologyCaseKey(row)
+                              ? "bg-[#24231f]"
+                              : ""
+                          }`}
+                        >
                           <td className="px-2 py-2 font-medium">{row.sponsor}</td>
                           <td className="px-2 py-2">{executionModeText(row.caseType)}</td>
                           <td className="px-2 py-2">
@@ -1212,6 +1400,23 @@ export default function HomePage() {
                                 : "Policy+docs scoring only (no workflow execution)."
                               : row.rationale}
                           </td>
+                          <td className="px-2 py-2">
+                            {row.present ? (
+                              <button
+                                type="button"
+                                onClick={() => setActiveMethodologyCase(methodologyCaseKey(row))}
+                                className={`rounded-full border px-2 py-1 text-[11px] font-semibold transition ${
+                                  selectedMethodologyRow && methodologyCaseKey(selectedMethodologyRow) === methodologyCaseKey(row)
+                                    ? "border-accent bg-accent/20 text-stone-100"
+                                    : "border-[#6b6b65] bg-[#1f1d1a] text-stone-200 hover:border-accent/60 hover:bg-accent/20"
+                                }`}
+                              >
+                                View flow
+                              </button>
+                            ) : (
+                              <span className="text-stone-500">-</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1222,6 +1427,214 @@ export default function HomePage() {
                 </p>
               </Card>
             </div>
+
+            <Card className="mt-4 border-[#4a4a46] bg-soft p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-stone-100">Case Flow Visualizer</p>
+                  <p className="text-xs text-stone-400">
+                    Detailed call path, scoring logic, and observed execution trace for the selected representative case.
+                  </p>
+                </div>
+                {selectedMethodologyRow?.present ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">{selectedMethodologyRow.sponsor}</Badge>
+                    <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">{executionModeText(selectedMethodologyRow.caseType)}</Badge>
+                    <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">
+                      {selectedMethodologyRow.caseName} (<code>{selectedMethodologyRow.caseId}</code>)
+                    </Badge>
+                  </div>
+                ) : null}
+              </div>
+
+              {!selectedMethodologyRow?.present ? (
+                <p className="mt-3 text-sm text-stone-400">Select a representative row with a mapped case to inspect its full flow.</p>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <Card className="space-y-2 bg-[#1f1d1a] p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-300">Case Inputs</p>
+                      <p className="text-xs text-stone-200">
+                        Amount: ${metricLabel(selectedMethodologyRow.scenario?.payment?.amountUsd)} ({metricLabel(selectedMethodologyRow.scenario?.payment?.amountHbar)} HBAR)
+                      </p>
+                      <p className="text-xs text-stone-200">Destination country: {selectedMethodologyRow.scenario?.payment?.destinationCountry || "-"}</p>
+                      <p className="text-xs text-stone-200">Service: {selectedMethodologyRow.scenario?.workflowInput?.service || "-"}</p>
+                      <p className="text-xs text-stone-200">Priority: {selectedMethodologyRow.scenario?.workflowInput?.priority || "-"}</p>
+                      <p className="text-xs text-stone-200">Retry policy: {selectedMethodologyRow.scenario?.retryPolicy?.retries ?? 0} retries / {selectedMethodologyRow.scenario?.retryPolicy?.delayMs ?? 0} ms</p>
+                    </Card>
+
+                    <Card className="space-y-2 bg-[#1f1d1a] p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-300">Expected Policy Output</p>
+                      <p className="text-xs text-stone-200">Decision: {selectedMethodologyRow.scenario?.expected?.decision || "-"}</p>
+                      <p className="text-xs text-stone-200">Approval required: {String(selectedMethodologyRow.scenario?.expected?.approvalRequired)}</p>
+                      <p className="text-xs text-stone-200">Risk level: {selectedMethodologyRow.scenario?.expected?.riskLevel || "-"}</p>
+                      <p className="text-xs text-stone-200">Required controls: {joinList(selectedMethodologyRow.scenario?.expected?.requiredControls)}</p>
+                      <p className="text-xs text-stone-200">Required source IDs: {joinList(selectedMethodologyRow.scenario?.requiredSources)}</p>
+                    </Card>
+
+                    <Card className="space-y-2 bg-[#1f1d1a] p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-300">Scoring + Gate Logic</p>
+                      <p className="text-xs text-stone-200">Policy Decision Quality = 55% base field matches + 35% controls F1 + 10% parse validity.</p>
+                      <p className="text-xs text-stone-200">Execution Gate (real cases): expected allow + parse OK + decision/approval/priority/risk all match + controls F1 ≥ 60.</p>
+                      <p className="text-xs text-stone-200">Docs mode adds required-source coverage and citation-validity checks.</p>
+                      <p className="text-xs text-stone-200">
+                        Overall (with docs) = 21% base policy + 18% controls F1 + 10% parse + 10% strict match + 11% workflow pass + 12% docs grounded + 9% required-source coverage + 5% citation validity + 4% latency score.
+                      </p>
+                      <p className="text-xs text-stone-200">
+                        Overall (without docs) = 28% base policy + 24% controls F1 + 14% parse + 14% strict match + 15% workflow pass + 5% latency score.
+                      </p>
+                      <p className="text-xs text-stone-200">Workflow pass rate is computed only on executed scenarios (executed pass / executed total).</p>
+                    </Card>
+                  </div>
+
+                  <Card className="space-y-3 bg-[#1f1d1a] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-300">Observed Runs For This Case</p>
+                      <p className="text-xs text-stone-400">Pick one model/doc-mode run to inspect exact call attempts.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedMethodologyResultRows.map((row) => {
+                        const key = methodologyResultKey(row);
+                        const mode = resolveResultDocMode(row);
+                        return (
+                          <button
+                            key={`method-result-${selectedMethodologyRow.caseId}-${key}`}
+                            type="button"
+                            onClick={() => setActiveMethodologyResult(key)}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                              activeMethodologyResult === key
+                                ? "border-accent bg-accent/20 text-stone-100"
+                                : "border-[#6b6b65] bg-[#1f1d1a] text-stone-200 hover:border-accent/60 hover:bg-accent/20"
+                            }`}
+                          >
+                            {row.model} · {docModeLabel(mode)} · attempt {row.attempt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {!selectedMethodologyResultRows.length ? (
+                      <p className="text-xs text-stone-400">
+                        No benchmark result exists for this case in the latest run. Run benchmark to generate observed traces.
+                      </p>
+                    ) : null}
+                  </Card>
+
+                  {selectedMethodologyResultRow ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Card className="space-y-2 bg-[#1f1d1a] p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-300">Selected Run Outcome</p>
+                        <p className="text-xs text-stone-200">
+                          Model: {selectedMethodologyResultRow.model} ({docModeLabel(resolveResultDocMode(selectedMethodologyResultRow))})
+                        </p>
+                        <p className="text-xs text-stone-200">
+                          Decision quality: {metricLabel(selectedMethodologyResultRow.evaluation.accuracyPct)}% | Controls F1: {metricLabel(selectedMethodologyResultRow.evaluation.controlsF1Pct)}%
+                        </p>
+                        <p className="text-xs text-stone-200">
+                          Docs coverage: {metricLabel(selectedMethodologyResultRow.evaluation.requiredSourceCoveragePct)}% | Citation validity: {metricLabel(selectedMethodologyResultRow.evaluation.citationValidityPct)}%
+                        </p>
+                        <p className="text-xs text-stone-200">Execution gate: {selectedMethodologyResultRow.evaluation.executionEligible ? "passed" : "failed"} ({executionGateFailureDetail(selectedMethodologyResultRow)})</p>
+                        <p className="text-xs text-stone-200">
+                          Workflow status: {normalizeWorkflowStatus(selectedMethodologyResultRow.workflow.status)} | Executed: {selectedMethodologyResultRow.workflow.executed ? "yes" : "no"}
+                        </p>
+                        <p className="text-xs text-stone-200">Total latency: {metricLabel(selectedMethodologyResultRow.totalLatencyMs)} ms</p>
+                        <p className="text-xs text-stone-200">Model reason: {selectedMethodologyResultRow.llm.reason || "no reason text"}</p>
+                        <p className="text-xs text-stone-200">Citations: {joinList(selectedMethodologyResultRow.llm.citations ?? [])}</p>
+                        <p className="text-xs text-stone-200">Required source hits: {joinList(selectedMethodologyResultRow.evaluation.requiredSourceHits ?? [])}</p>
+                      </Card>
+
+                      <Card className="space-y-2 bg-[#1f1d1a] p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-300">Challenge Mapping For This Case</p>
+                        <p className="text-xs text-stone-200">
+                          {selectedMethodologyRow.mappedChallenges.length
+                            ? selectedMethodologyRow.mappedChallenges.join(" | ")
+                            : "No mapped challenge labels."}
+                        </p>
+                        <p className="text-xs text-stone-200">Case rationale: {selectedMethodologyRow.rationale}</p>
+                        <p className="text-xs text-stone-200">
+                          Context fields:{" "}
+                          {selectedMethodologyRow.scenario?.context
+                            ? Object.entries(selectedMethodologyRow.scenario.context)
+                                .map(([key, value]) => `${key}=${String(value)}`)
+                                .join(", ")
+                            : "none"}
+                        </p>
+                        <p className="text-xs text-stone-200">
+                          Runner path: LLM inference → evaluation/gate → (if eligible) Ledger policy/approval → Chainlink workflow → Hedera settlement → service probe.
+                        </p>
+                      </Card>
+                    </div>
+                  ) : null}
+
+                  {selectedMethodologyResultRow ? (
+                    <div className="overflow-x-auto">
+                      <table className="data-table min-w-full text-left text-xs">
+                        <thead className="text-stone-300">
+                          <tr>
+                            <th className="px-2 py-2">Stage</th>
+                            <th className="px-2 py-2">Attempted</th>
+                            <th className="px-2 py-2">Status</th>
+                            <th className="px-2 py-2">Duration (ms)</th>
+                            <th className="px-2 py-2">Retries</th>
+                            <th className="px-2 py-2">Mode</th>
+                            <th className="px-2 py-2">Endpoint / Command</th>
+                            <th className="px-2 py-2">What We Measure</th>
+                            <th className="px-2 py-2">Observed Detail</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedMethodologyTrace.map((step) => (
+                            <tr key={`trace-${selectedMethodologyResultRow.model}-${selectedMethodologyResultRow.caseId}-${step.id}`} className="border-t border-[#4a4a46]">
+                              <td className="px-2 py-2 font-medium">{step.label}</td>
+                              <td className="px-2 py-2">{step.attempted ? "yes" : "no"}</td>
+                              <td className={`px-2 py-2 font-semibold ${traceStatusTone(step.status)}`}>{step.status}</td>
+                              <td className="px-2 py-2">{metricLabel(step.durationMs)}</td>
+                              <td className="px-2 py-2">{step.retriesUsed}</td>
+                              <td className="px-2 py-2">{step.mode || "-"}</td>
+                              <td className="px-2 py-2">{step.endpoint || "-"}</td>
+                              <td className="px-2 py-2">{traceMeasurementFocus(step.id)}</td>
+                              <td className="px-2 py-2">{step.detail || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+
+                  {selectedMethodologyResultRows.length ? (
+                    <div className="overflow-x-auto">
+                      <table className="data-table min-w-full text-left text-xs">
+                        <thead className="text-stone-300">
+                          <tr>
+                            <th className="px-2 py-2">Model</th>
+                            <th className="px-2 py-2">Doc Mode</th>
+                            <th className="px-2 py-2">Policy Quality %</th>
+                            <th className="px-2 py-2">Docs Coverage %</th>
+                            <th className="px-2 py-2">Gate Eligible</th>
+                            <th className="px-2 py-2">Workflow Status</th>
+                            <th className="px-2 py-2">Executed</th>
+                            <th className="px-2 py-2">Total Latency (ms)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedMethodologyResultRows.map((row) => (
+                            <tr key={`case-summary-${row.model}-${resolveResultDocMode(row)}`} className="border-t border-[#4a4a46]">
+                              <td className="px-2 py-2 font-medium">{row.model}</td>
+                              <td className="px-2 py-2">{docModeLabel(resolveResultDocMode(row))}</td>
+                              <td className="px-2 py-2">{metricLabel(row.evaluation.accuracyPct)}</td>
+                              <td className="px-2 py-2">{metricLabel(row.evaluation.requiredSourceCoveragePct)}</td>
+                              <td className="px-2 py-2">{row.evaluation.executionEligible ? "yes" : "no"}</td>
+                              <td className="px-2 py-2">{normalizeWorkflowStatus(row.workflow.status)}</td>
+                              <td className="px-2 py-2">{row.workflow.executed ? "yes" : "no"}</td>
+                              <td className="px-2 py-2">{metricLabel(row.totalLatencyMs)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </Card>
           </Disclosure>
         </section>
 

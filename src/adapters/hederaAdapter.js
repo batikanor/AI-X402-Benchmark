@@ -94,7 +94,8 @@ export class HederaAdapter {
       txHash: payload.txHash,
       transactionId: payload.transactionId || null,
       network: payload.network || this.config.network || "testnet",
-      mode: "relay"
+      mode: "relay",
+      endpoint: relayUrl
     };
   }
 
@@ -146,7 +147,8 @@ export class HederaAdapter {
         transactionId: tx.transactionId.toString(),
         status: receipt.status?.toString?.() || "UNKNOWN",
         network,
-        mode: "sdk"
+        mode: "sdk",
+        endpoint: `hedera-sdk:${network}`
       };
     } finally {
       client.close();

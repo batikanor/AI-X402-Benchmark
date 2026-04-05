@@ -12,7 +12,8 @@ export class ServiceProbe {
       return {
         status: "skipped",
         code: null,
-        details: "No service probe URL configured"
+        details: "No service probe URL configured",
+        endpoint: null
       };
     }
 
@@ -37,7 +38,8 @@ export class ServiceProbe {
     return {
       status: resp.ok ? "ok" : "failed",
       code: resp.status,
-      details: bodyText
+      details: bodyText,
+      endpoint: url
     };
   }
 }

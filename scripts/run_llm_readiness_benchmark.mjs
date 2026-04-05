@@ -476,6 +476,67 @@ function executionGateFailureReasons({ testCase, parsed, evalResult }) {
   return reasons;
 }
 
+function skippedWorkflowTrace(reason) {
+  const detail = String(reason || "Execution was skipped.");
+  return [
+    {
+      id: "ledger_policy",
+      label: "Ledger policy pre-check",
+      attempted: false,
+      status: "skipped",
+      durationMs: 0,
+      retriesUsed: 0,
+      mode: "local_policy",
+      endpoint: "local-policy-engine",
+      detail,
+    },
+    {
+      id: "ledger_approval",
+      label: "Ledger approval check",
+      attempted: false,
+      status: "skipped",
+      durationMs: 0,
+      retriesUsed: 0,
+      mode: null,
+      endpoint: null,
+      detail,
+    },
+    {
+      id: "chainlink_workflow",
+      label: "Chainlink workflow orchestration",
+      attempted: false,
+      status: "skipped",
+      durationMs: 0,
+      retriesUsed: 0,
+      mode: null,
+      endpoint: null,
+      detail,
+    },
+    {
+      id: "hedera_settlement",
+      label: "Hedera settlement",
+      attempted: false,
+      status: "skipped",
+      durationMs: 0,
+      retriesUsed: 0,
+      mode: null,
+      endpoint: null,
+      detail,
+    },
+    {
+      id: "service_probe",
+      label: "Service probe",
+      attempted: false,
+      status: "skipped",
+      durationMs: 0,
+      retriesUsed: 0,
+      mode: "http_probe",
+      endpoint: null,
+      detail,
+    },
+  ];
+}
+
 function contextLines(context) {
   if (!context || typeof context !== 'object') return [];
   return Object.entries(context)
@@ -1257,7 +1318,9 @@ async function main() {
             txHash: null,
             workflowId: null,
             durationMs: 0,
+            durationBreakdownMs: {},
             notes: [],
+            trace: [],
           };
 
           if (evalResult.executionEligible) {
@@ -1273,7 +1336,9 @@ async function main() {
               txHash: workflowRun.txHash || null,
               workflowId: workflowRun.workflowId || null,
               durationMs: workflowRun.durationMs?.total || 0,
+              durationBreakdownMs: workflowRun.durationMs || {},
               notes: workflowRun.notes || [],
+              trace: Array.isArray(workflowRun.trace) ? workflowRun.trace : [],
             };
           } else {
             const notes = [];
@@ -1288,14 +1353,19 @@ async function main() {
             }
 
             workflow.notes = notes;
+            let skipReason = 'Execution skipped by gate.';
             if (testCase.executionMode !== 'real') {
               workflow.status = 'decision_only_case';
+              skipReason = 'Case is decision-only by suite design.';
             } else if (testCase.expected.decision === 'block') {
               workflow.status = 'blocked_by_policy_expectation';
+              skipReason = 'Expected policy decision is block, so execution is intentionally skipped.';
             } else {
               const primary = gateFailures[0] || 'unknown_gate_failure';
               workflow.status = `not_executed_${primary}`;
+              skipReason = `Execution gate failed (${gateFailures.join(', ') || primary}).`;
             }
+            workflow.trace = skippedWorkflowTrace(skipReason);
           }
 
           const totalLatencyMs = round(llmLatencyMs + Number(workflow.durationMs || 0));

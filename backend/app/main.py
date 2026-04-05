@@ -646,8 +646,13 @@ def _scenario_templates() -> list[dict[str, Any]]:
                 "executionMode": str(case.get("executionMode") or "real"),
                 "payment": {
                     "amountUsd": float(payment.get("amountUsd", 0) or 0),
+                    "amountHbar": float(payment.get("amountHbar", 0) or 0),
+                    "recipientAccountId": str(payment.get("recipientAccountId") or ""),
                     "destinationCountry": str(payment.get("destinationCountry") or ""),
                 },
+                "workflowInput": scenario.get("workflowInput", {}),
+                "retryPolicy": scenario.get("retryPolicy", {}),
+                "context": case.get("context", {}),
                 "expected": {
                     "decision": str(expected.get("decision") or ""),
                     "approvalRequired": expected.get("approvalRequired"),

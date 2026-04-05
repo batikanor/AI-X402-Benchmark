@@ -99,17 +99,106 @@ export class BenchmarkRunner {
     let txHash = null;
     let workflowId = null;
     const notes = [];
+    const trace = [
+      {
+        id: "ledger_policy",
+        label: "Ledger policy pre-check",
+        attempted: false,
+        status: "skipped",
+        durationMs: 0,
+        retriesUsed: 0,
+        mode: "local_policy",
+        endpoint: "local-policy-engine",
+        detail: "Not evaluated yet."
+      },
+      {
+        id: "ledger_approval",
+        label: "Ledger approval check",
+        attempted: false,
+        status: "skipped",
+        durationMs: 0,
+        retriesUsed: 0,
+        mode: null,
+        endpoint: null,
+        detail: "Not evaluated yet."
+      },
+      {
+        id: "chainlink_workflow",
+        label: "Chainlink workflow orchestration",
+        attempted: false,
+        status: "skipped",
+        durationMs: 0,
+        retriesUsed: 0,
+        mode: null,
+        endpoint: null,
+        detail: "Not executed yet."
+      },
+      {
+        id: "hedera_settlement",
+        label: "Hedera settlement",
+        attempted: false,
+        status: "skipped",
+        durationMs: 0,
+        retriesUsed: 0,
+        mode: null,
+        endpoint: null,
+        detail: "Not executed yet."
+      },
+      {
+        id: "service_probe",
+        label: "Service probe",
+        attempted: false,
+        status: "skipped",
+        durationMs: 0,
+        retriesUsed: 0,
+        mode: "http_probe",
+        endpoint: null,
+        detail: "Not executed yet."
+      }
+    ];
+    const setTrace = (id, patch) => {
+      const entry = trace.find((item) => item.id === id);
+      if (entry) Object.assign(entry, patch);
+    };
 
     try {
       const ledgerStart = process.hrtime.bigint();
+      const policyStart = process.hrtime.bigint();
       const policyDecision = this.ledger.evaluatePolicy({
         amountUsd: scenario.payment.amountUsd,
         destinationCountry: scenario.payment.destinationCountry
+      });
+      const policyDurationMs = msToFixed(durationMs(policyStart, process.hrtime.bigint()));
+      setTrace("ledger_policy", {
+        attempted: true,
+        status: policyDecision.allowed ? "passed" : "blocked",
+        durationMs: policyDurationMs,
+        detail: policyDecision.reason
       });
 
       if (!policyDecision.allowed) {
         durations.ledger = msToFixed(durationMs(ledgerStart, process.hrtime.bigint()));
         durations.total = msToFixed(durationMs(scenarioStart, process.hrtime.bigint()));
+        setTrace("ledger_approval", {
+          attempted: false,
+          status: "skipped",
+          detail: "Skipped because policy decision blocked execution."
+        });
+        setTrace("chainlink_workflow", {
+          attempted: false,
+          status: "skipped",
+          detail: "Skipped because policy decision blocked execution."
+        });
+        setTrace("hedera_settlement", {
+          attempted: false,
+          status: "skipped",
+          detail: "Skipped because policy decision blocked execution."
+        });
+        setTrace("service_probe", {
+          attempted: false,
+          status: "skipped",
+          detail: "Skipped because policy decision blocked execution."
+        });
         return {
           id: scenario.id,
           name: scenario.name,
@@ -118,20 +207,48 @@ export class BenchmarkRunner {
           txHash: null,
           workflowId: null,
           durationMs: durations,
-          notes: [policyDecision.reason]
+          notes: [policyDecision.reason],
+          trace
         };
       }
 
       if (policyDecision.approvalRequired) {
+        const approvalStart = process.hrtime.bigint();
         const approval = await this.ledger.requestApproval({
           scenarioId: scenario.id,
           runId,
           amountUsd: scenario.payment.amountUsd
         });
+        const approvalDurationMs = msToFixed(durationMs(approvalStart, process.hrtime.bigint()));
+        setTrace("ledger_approval", {
+          attempted: true,
+          status: approval.approved ? "approved" : "rejected",
+          durationMs: approvalDurationMs,
+          mode: approval.mode || null,
+          endpoint: approval.endpoint || null,
+          detail: approval.approved
+            ? `Approved by ${approval.approverRef || "unknown approver"}`
+            : "Ledger approval rejected by approver."
+        });
 
         if (!approval.approved) {
           durations.ledger = msToFixed(durationMs(ledgerStart, process.hrtime.bigint()));
           durations.total = msToFixed(durationMs(scenarioStart, process.hrtime.bigint()));
+          setTrace("chainlink_workflow", {
+            attempted: false,
+            status: "skipped",
+            detail: "Skipped because ledger approval was rejected."
+          });
+          setTrace("hedera_settlement", {
+            attempted: false,
+            status: "skipped",
+            detail: "Skipped because ledger approval was rejected."
+          });
+          setTrace("service_probe", {
+            attempted: false,
+            status: "skipped",
+            detail: "Skipped because ledger approval was rejected."
+          });
           return {
             id: scenario.id,
             name: scenario.name,
@@ -140,68 +257,162 @@ export class BenchmarkRunner {
             txHash: null,
             workflowId: null,
             durationMs: durations,
-            notes: ["Ledger approval rejected"]
+            notes: ["Ledger approval rejected"],
+            trace
           };
         }
 
         notes.push(`Approval ref: ${approval.approverRef || "n/a"}`);
+      } else {
+        setTrace("ledger_approval", {
+          attempted: false,
+          status: "not_required",
+          detail: "Approval not required for this payment amount/risk profile."
+        });
       }
       durations.ledger = msToFixed(durationMs(ledgerStart, process.hrtime.bigint()));
 
       const retryPolicy = scenario.retryPolicy || this.config.defaultRetryPolicy || { retries: 1, delayMs: 1000 };
 
       const chainlinkStart = process.hrtime.bigint();
-      const chainlinkExec = await withRetry(
-        () => this.chainlink.runWorkflow({
-          scenarioId: scenario.id,
-          runId,
-          workflowInput: scenario.workflowInput || {}
-        }),
-        retryPolicy.retries,
-        retryPolicy.delayMs,
-        this.logger,
-        `chainlink:${scenario.id}`
-      );
+      setTrace("chainlink_workflow", {
+        attempted: true,
+        status: "running",
+        detail: "Chainlink workflow call started."
+      });
+      let chainlinkExec;
+      try {
+        chainlinkExec = await withRetry(
+          () => this.chainlink.runWorkflow({
+            scenarioId: scenario.id,
+            runId,
+            workflowInput: scenario.workflowInput || {}
+          }),
+          retryPolicy.retries,
+          retryPolicy.delayMs,
+          this.logger,
+          `chainlink:${scenario.id}`
+        );
+      } catch (error) {
+        const duration = msToFixed(durationMs(chainlinkStart, process.hrtime.bigint()));
+        setTrace("chainlink_workflow", {
+          attempted: true,
+          status: "failed",
+          durationMs: duration,
+          retriesUsed: retryPolicy.retries,
+          detail: String(error.message || error)
+        });
+        throw error;
+      }
       retryCount += chainlinkExec.retriesUsed;
       workflowId = chainlinkExec.value.workflowId;
       durations.chainlink = msToFixed(durationMs(chainlinkStart, process.hrtime.bigint()));
+      setTrace("chainlink_workflow", {
+        status: "success",
+        durationMs: durations.chainlink,
+        retriesUsed: chainlinkExec.retriesUsed,
+        mode: chainlinkExec.value.mode || null,
+        endpoint: chainlinkExec.value.endpoint || null,
+        detail: `Workflow ${workflowId || "n/a"} (${chainlinkExec.value.status || "completed"}).`
+      });
 
       const hederaStart = process.hrtime.bigint();
-      const hederaExec = await withRetry(
-        () => this.hedera.executePayment({
-          scenarioId: scenario.id,
-          runId,
-          payment: scenario.payment
-        }),
-        retryPolicy.retries,
-        retryPolicy.delayMs,
-        this.logger,
-        `hedera:${scenario.id}`
-      );
+      setTrace("hedera_settlement", {
+        attempted: true,
+        status: "running",
+        detail: "Submitting settlement to Hedera."
+      });
+      let hederaExec;
+      try {
+        hederaExec = await withRetry(
+          () => this.hedera.executePayment({
+            scenarioId: scenario.id,
+            runId,
+            payment: scenario.payment
+          }),
+          retryPolicy.retries,
+          retryPolicy.delayMs,
+          this.logger,
+          `hedera:${scenario.id}`
+        );
+      } catch (error) {
+        const duration = msToFixed(durationMs(hederaStart, process.hrtime.bigint()));
+        setTrace("hedera_settlement", {
+          attempted: true,
+          status: "failed",
+          durationMs: duration,
+          retriesUsed: retryPolicy.retries,
+          detail: String(error.message || error)
+        });
+        throw error;
+      }
       retryCount += hederaExec.retriesUsed;
       txHash = hederaExec.value.txHash;
       durations.hedera = msToFixed(durationMs(hederaStart, process.hrtime.bigint()));
+      setTrace("hedera_settlement", {
+        status: "success",
+        durationMs: durations.hedera,
+        retriesUsed: hederaExec.retriesUsed,
+        mode: hederaExec.value.mode || null,
+        endpoint: hederaExec.value.endpoint || null,
+        detail: `txHash: ${txHash || "n/a"}`
+      });
 
       const probeStart = process.hrtime.bigint();
-      const probeExec = await withRetry(
-        () => this.serviceProbe.probe({
-          runId,
-          scenarioId: scenario.id,
-          txHash,
-          workflowId
-        }),
-        retryPolicy.retries,
-        retryPolicy.delayMs,
-        this.logger,
-        `serviceProbe:${scenario.id}`
-      );
+      setTrace("service_probe", {
+        attempted: true,
+        status: "running",
+        detail: "Running post-settlement service probe."
+      });
+      let probeExec;
+      try {
+        probeExec = await withRetry(
+          () => this.serviceProbe.probe({
+            runId,
+            scenarioId: scenario.id,
+            txHash,
+            workflowId
+          }),
+          retryPolicy.retries,
+          retryPolicy.delayMs,
+          this.logger,
+          `serviceProbe:${scenario.id}`
+        );
+      } catch (error) {
+        const duration = msToFixed(durationMs(probeStart, process.hrtime.bigint()));
+        setTrace("service_probe", {
+          attempted: true,
+          status: "failed",
+          durationMs: duration,
+          retriesUsed: retryPolicy.retries,
+          detail: String(error.message || error)
+        });
+        throw error;
+      }
       retryCount += probeExec.retriesUsed;
       durations.serviceProbe = msToFixed(durationMs(probeStart, process.hrtime.bigint()));
 
       if (probeExec.value.status === "failed") {
         notes.push(`Service probe failed with code ${probeExec.value.code}`);
+        setTrace("service_probe", {
+          status: "failed",
+          durationMs: durations.serviceProbe,
+          retriesUsed: probeExec.retriesUsed,
+          endpoint: probeExec.value.endpoint || null,
+          detail: `Probe failed (${probeExec.value.code || "unknown"}): ${probeExec.value.details || "no details"}`
+        });
         status = "failed";
       } else {
+        setTrace("service_probe", {
+          status: probeExec.value.status === "skipped" ? "skipped" : "success",
+          durationMs: durations.serviceProbe,
+          retriesUsed: probeExec.retriesUsed,
+          endpoint: probeExec.value.endpoint || null,
+          detail:
+            probeExec.value.status === "skipped"
+              ? "No probe URL configured; probe skipped."
+              : `Probe passed (${probeExec.value.code || "ok"}).`
+        });
         status = "success";
       }
     } catch (error) {
@@ -228,7 +439,8 @@ export class BenchmarkRunner {
       txHash,
       workflowId,
       durationMs: durations,
-      notes
+      notes,
+      trace
     };
   }
 }
