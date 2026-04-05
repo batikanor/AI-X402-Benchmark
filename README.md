@@ -174,6 +174,12 @@ For hosted readiness runs (recommended):
 - `OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`
 - `OPENROUTER_REFERER` and `OPENROUTER_TITLE` (optional but recommended)
 - `X402BENCH_MODEL_TIMEOUT_MS=90000` (recommended to avoid stalled provider calls hanging a run)
+- `X402BENCH_SETTLEMENT_HBAR_OVERRIDE=0.01` (recommended for hackathon testing to reduce Hedera testnet token burn)
+
+Hedera settlement throttling (optional):
+- `X402BENCH_SETTLEMENT_HBAR_OVERRIDE`: if set, every real settlement uses this exact HBAR amount.
+- `X402BENCH_SETTLEMENT_HBAR_MULTIPLIER`: scales per-case `amountHbar` when override is empty.
+- `X402BENCH_SETTLEMENT_HBAR_MIN` / `X402BENCH_SETTLEMENT_HBAR_MAX`: clamps final transfer amount.
 
 For direct OpenAI runs:
 - `OPENAI_API_KEY` (required)
