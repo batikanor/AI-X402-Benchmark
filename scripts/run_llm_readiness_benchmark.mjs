@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { BenchmarkRunner } from '../src/core/runner.js';
 import { Logger } from '../src/utils/logger.js';
 
-const SUPPORTED_RUNTIMES = new Set(['ollama', 'openai_compat']);
+const SUPPORTED_RUNTIMES = new Set(['openai_compat']);
 const SUPPORTED_DOC_MODES = new Set(['with_docs', 'without_docs']);
 
 function parseArgs(argv) {
@@ -14,7 +14,7 @@ function parseArgs(argv) {
     suite: 'readiness_bench/suite.json',
     models: '',
     outdir: 'readiness_bench/results',
-    runtime: 'ollama',
+    runtime: 'openai_compat',
     apiBaseUrl: '',
     apiKeyEnv: 'OPENAI_API_KEY',
     runsPerScenario: 1,
@@ -23,8 +23,9 @@ function parseArgs(argv) {
     integrationBaseUrl: '',
     docsPack: '',
     docsTopK: 0,
-    requireCitations: true,
+    requireCitations: false,
     docModes: 'with_docs,without_docs',
+    promptOverride: '',
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -106,6 +107,10 @@ function parseArgs(argv) {
       case '--doc-modes':
         if (!value) throw new Error('--doc-modes requires a value');
         options.docModes = value.trim();
+        break;
+      case '--prompt-override':
+        if (!value) throw new Error('--prompt-override requires a value');
+        options.promptOverride = value;
         break;
       default:
         throw new Error(`Unknown flag: ${flag}`);
@@ -408,19 +413,12 @@ function evaluateDecision(expected, parsed, executionMode, docsContext = {}) {
       : (docsContext.docsEnabled ? (citationCount > 0 ? 100 : 0) : 100),
     2,
   );
-  const citationsSatisfied = docsContext.docsEnabled
-    ? docsContext.requireCitations
-      ? citationCount > 0 && validCitationCount > 0 && requiredSourceCoveragePct >= 100
-      : true
-    : true;
-
   const fullMatch = parsed.parseOk
     && decisionMatch
     && approvalMatch
     && priorityMatch
     && riskMatch
-    && controlScores.f1 >= 0.99
-    && citationsSatisfied;
+    && controlScores.f1 >= 0.99;
 
   const executionEligible = executionMode === 'real'
     && expected.decision === 'allow'
@@ -448,7 +446,7 @@ function evaluateDecision(expected, parsed, executionMode, docsContext = {}) {
     citationValidityPct,
     requiredSourceCoveragePct,
     requiredSourceHits,
-    docsGrounded: citationsSatisfied,
+    docsGrounded: true,
     accuracyPct,
     executionEligible,
   };
@@ -695,7 +693,7 @@ function selectDocExcerpts({ docsPack, testCase, topK }) {
     .map((item) => item.chunk);
 }
 
-function buildPrompt({ testCase, expected, controlVocabulary, docExcerpts }) {
+function buildPrompt({ testCase, expected, controlVocabulary, docExcerpts, promptOverride }) {
   const scenario = testCase.scenario || {};
   const payment = scenario.payment || {};
   const workflowInput = scenario.workflowInput || {};
@@ -703,8 +701,7 @@ function buildPrompt({ testCase, expected, controlVocabulary, docExcerpts }) {
   const expectedControlsText = expected.requiredControls.join(', ') || 'none';
   const vocabText = controlVocabulary.length ? controlVocabulary.join(', ') : expectedControlsText;
   const hasDocs = Array.isArray(docExcerpts) && docExcerpts.length > 0;
-
-  return [
+  const instructionBlock = String(promptOverride || '').trim() || [
     'You are a payment policy and workflow readiness evaluator.',
     'Return ONLY valid JSON with no markdown using this exact schema:',
     '{"decision":"allow|block","approvalRequired":true|false,"priority":"low|standard|high|critical","riskLevel":"low|medium|high|critical","requiredControls":["snake_case_control"],"citations":["source_id#chunk_index"],"reason":"short justification"}',
@@ -716,6 +713,10 @@ function buildPrompt({ testCase, expected, controlVocabulary, docExcerpts }) {
     '- citations must only include IDs from provided documentation excerpts.',
     '- if no documentation excerpts are provided, return citations as an empty array.',
     `- Known controls: ${vocabText}`,
+  ].join('\n');
+
+  return [
+    instructionBlock,
     '',
     `Case: ${testCase.name}`,
     `Execution mode: ${testCase.executionMode}`,
@@ -736,9 +737,28 @@ function buildPrompt({ testCase, expected, controlVocabulary, docExcerpts }) {
   ].filter(Boolean).join('\n');
 }
 
+function requestTimeoutMs() {
+  const raw = Number(process.env.X402BENCH_MODEL_TIMEOUT_MS || 90000);
+  if (Number.isFinite(raw) && raw >= 5000 && raw <= 600000) return Math.floor(raw);
+  return 90000;
+}
+
+async function fetchWithTimeout(url, init = {}, timeoutMs = requestTimeoutMs()) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function callOllama({ model, prompt, maxTokens, temperature, apiBaseUrl }) {
   const endpoint = apiBaseUrl || process.env.OLLAMA_API_URL || 'http://127.0.0.1:11434/api/generate';
-  const response = await fetch(endpoint, {
+  const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -766,7 +786,7 @@ async function callOllama({ model, prompt, maxTokens, temperature, apiBaseUrl })
 }
 
 function resolveOpenAICompatApiKey(apiKeyEnv) {
-  const candidates = Array.from(new Set([apiKeyEnv, 'OPENAI_API_KEY', 'HF_TOKEN'].filter(Boolean)));
+  const candidates = Array.from(new Set([apiKeyEnv, 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'HF_TOKEN'].filter(Boolean)));
   for (const name of candidates) {
     const value = process.env[name];
     if (value && value.trim()) {
@@ -786,6 +806,10 @@ async function callOpenAICompat({ model, prompt, maxTokens, temperature, apiBase
     'content-type': 'application/json',
     authorization: `Bearer ${key}`,
   };
+  if (baseUrl.includes('openrouter.ai')) {
+    headers['HTTP-Referer'] = process.env.OPENROUTER_REFERER || 'https://x402bench.local';
+    headers['X-Title'] = process.env.OPENROUTER_TITLE || 'x402Bench';
+  }
   const messages = [
     {
       role: 'system',
@@ -804,7 +828,7 @@ async function callOpenAICompat({ model, prompt, maxTokens, temperature, apiBase
     messages,
   };
 
-  let response = await fetch(endpoint, {
+  let response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers,
     body: JSON.stringify(payloadWithMaxTokens),
@@ -825,7 +849,7 @@ async function callOpenAICompat({ model, prompt, maxTokens, temperature, apiBase
         messages,
       };
 
-      response = await fetch(endpoint, {
+      response = await fetchWithTimeout(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(payloadWithMaxCompletionTokens),
@@ -849,33 +873,12 @@ async function callOpenAICompat({ model, prompt, maxTokens, temperature, apiBase
   };
 }
 
-function isLikelyLocalModelTag(model) {
-  const value = String(model || '').trim();
-  if (!value) return false;
-  const lower = value.toLowerCase();
-  if (
-    lower.startsWith('gpt-')
-    || lower.startsWith('o1')
-    || lower.startsWith('o3')
-    || lower.startsWith('o4')
-    || lower.startsWith('chatgpt-')
-  ) {
-    return false;
-  }
-  if (value.includes(':')) return true;
-  if (lower.startsWith('local/')) return true;
-  return false;
-}
-
 function resolveModelRouting({ runtime, model }) {
   const raw = String(model || '').trim();
   const lower = raw.toLowerCase();
 
   if (lower.startsWith('ollama:')) {
-    return {
-      provider: 'ollama',
-      model: raw.slice('ollama:'.length).trim(),
-    };
+    throw new Error('Ollama-prefixed models are disabled in hosted mode. Use OpenRouter/OpenAI-compatible model IDs.');
   }
   if (lower.startsWith('openai:')) {
     return {
@@ -883,11 +886,8 @@ function resolveModelRouting({ runtime, model }) {
       model: raw.slice('openai:'.length).trim(),
     };
   }
-  if (runtime === 'ollama') {
-    return { provider: 'ollama', model: raw };
-  }
-  if (runtime === 'openai_compat' && isLikelyLocalModelTag(raw)) {
-    return { provider: 'ollama', model: raw };
+  if (runtime !== 'openai_compat') {
+    throw new Error(`Unsupported runtime: ${runtime}`);
   }
   return { provider: 'openai_compat', model: raw };
 }
@@ -899,11 +899,7 @@ async function callModel({ runtime, model, prompt, maxTokens, temperature, apiBa
   const routedModel = routed.model;
 
   let response;
-  if (routedRuntime === 'ollama') {
-    // When mixed-provider mode is used (runtime=openai_compat), keep Ollama on local endpoint.
-    const ollamaApiBaseUrl = runtime === 'ollama' ? apiBaseUrl : undefined;
-    response = await callOllama({ model: routedModel, prompt, maxTokens, temperature, apiBaseUrl: ollamaApiBaseUrl });
-  } else if (routedRuntime === 'openai_compat') {
+  if (routedRuntime === 'openai_compat') {
     response = await callOpenAICompat({ model: routedModel, prompt, maxTokens, temperature, apiBaseUrl, apiKeyEnv });
   } else {
     throw new Error(`Unsupported runtime: ${routedRuntime}`);
@@ -1032,26 +1028,14 @@ function modelSummaryRows(results, expectedPerModel, docsEnabled) {
     const workflowSuccessRatePct = round((executionSuccess / (executed || 1)) * 100);
 
     const latencyScore = clamp(100 - percentile(latencies, 95) / 40, 0, 100);
-    const overallScore = docsEnabled
-      ? round(
-        (basePolicyAccuracyPct * 0.21)
-        + (controlsF1Pct * 0.18)
-        + (parseRatePct * 0.1)
-        + (fullMatchRatePct * 0.1)
-        + (workflowSuccessRatePct * 0.11)
-        + (docsGroundingRatePct * 0.12)
-        + (requiredSourceCoveragePct * 0.09)
-        + (citationValidityPct * 0.05)
-        + (latencyScore * 0.04),
-      )
-      : round(
-        (basePolicyAccuracyPct * 0.28)
-        + (controlsF1Pct * 0.24)
-        + (parseRatePct * 0.14)
-        + (fullMatchRatePct * 0.14)
-        + (workflowSuccessRatePct * 0.15)
-        + (latencyScore * 0.05),
-      );
+    const overallScore = round(
+      (basePolicyAccuracyPct * 0.28)
+      + (controlsF1Pct * 0.24)
+      + (parseRatePct * 0.14)
+      + (fullMatchRatePct * 0.14)
+      + (workflowSuccessRatePct * 0.15)
+      + (latencyScore * 0.05),
+    );
 
     summaries.push({
       model,
@@ -1248,6 +1232,7 @@ async function main() {
             expected: testCase.expected,
             controlVocabulary: suite.controlVocabulary,
             docExcerpts,
+            promptOverride: options.promptOverride,
           });
 
           let llmOutput = '';
@@ -1298,7 +1283,7 @@ async function main() {
             testCase.executionMode,
             {
               docsEnabled,
-              requireCitations: docsEnabled ? options.requireCitations : false,
+              requireCitations: false,
               requiredSourceIds: testCase.requiredSources,
               providedExcerptIds: docExcerpts.map((item) => item.chunkId),
             },
@@ -1348,9 +1333,6 @@ async function main() {
             if (!evalResult.priorityMatch) notes.push('Priority mismatch versus requested workflow priority.');
             if (!evalResult.riskMatch) notes.push('Risk-level mismatch versus benchmark expectation.');
             if (evalResult.controlsF1Pct < 60) notes.push('Control selection quality below readiness threshold.');
-            if (docsEnabled && !evalResult.docsGrounded) {
-              notes.push('Documentation grounding check failed (missing/invalid citations or missing required source coverage).');
-            }
 
             workflow.notes = notes;
             let skipReason = 'Execution skipped by gate.';
@@ -1444,7 +1426,11 @@ async function main() {
         version: docsPack.version,
         sourceCount: docsPack.sources.length,
         topK: options.docsTopK,
-        requireCitations: options.requireCitations,
+        requireCitations: false,
+      },
+      prompt: {
+        overrideEnabled: Boolean(String(options.promptOverride || '').trim()),
+        overridePreview: String(options.promptOverride || '').trim().slice(0, 240) || null,
       },
     },
     definition: {

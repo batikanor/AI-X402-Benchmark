@@ -26,12 +26,20 @@ import {
   type ReadinessDashboardResponse,
 } from "@/lib/api";
 
-type RuntimeMode = "ollama" | "openai_compat";
+type RuntimeMode = "openai_compat";
 type SponsorKey = "Hedera" | "Chainlink" | "Ledger";
 type ReadinessResult = ReadinessDashboardResponse["results"][number];
 type ReadinessScenario = ReadinessDashboardResponse["scenarios"][number];
 
-const HF_OPENAI_COMPAT_URL = "https://router.huggingface.co/v1";
+const OPENROUTER_OPENAI_COMPAT_URL = "https://openrouter.ai/api/v1";
+const DEFAULT_OPENROUTER_MODEL_SET = [
+  "openai/gpt-5.4-mini",
+  "openai/gpt-5.4-nano",
+  "qwen/qwen3-8b",
+  "qwen/qwen2.5-coder-7b-instruct",
+  "meta-llama/llama-3.1-8b-instruct",
+  "google/gemma-2-9b-it",
+].join(",");
 const SPONSORS: SponsorKey[] = ["Hedera", "Chainlink", "Ledger"];
 const OFFICIAL_DOC_DOMAINS = ["docs.hedera.com", "docs.chain.link", "developers.ledger.com", "eips.ethereum.org"];
 
@@ -596,18 +604,18 @@ function buildHumanTaskChecklist(result: ReadinessResult): HumanTask[] {
       detail: `Expected: ${joinList(expectedControls)} | Returned: ${joinList(modelControls)} | Controls F1 ${metricLabel(result.evaluation.controlsF1Pct)}%.`,
     },
     {
-      label: "Ground answer in required docs",
-      passed: docsEnabled ? Boolean(result.evaluation.docsGrounded) : true,
+      label: "Documentation context attached",
+      passed: true,
       detail: docsEnabled
-        ? `Required sources hit: ${joinList(result.evaluation.requiredSourceHits ?? [])}. Coverage ${metricLabel(result.evaluation.requiredSourceCoveragePct)}%.`
-        : "Documentation grounding is disabled for this run.",
+        ? `Mode includes official docs excerpts (${(result.docs.providedExcerptIds ?? []).length} excerpts).`
+        : "Mode runs without docs context.",
     },
     {
-      label: "Provide valid citations",
-      passed: docsEnabled ? (result.evaluation.citationValidityPct ?? 0) >= 90 : true,
+      label: "Citation stats (informational only)",
+      passed: true,
       detail: docsEnabled
         ? `${result.evaluation.validCitationCount ?? 0}/${result.evaluation.citationCount ?? 0} citations valid (${metricLabel(result.evaluation.citationValidityPct)}%).`
-        : "Citation validation is disabled because docs grounding is off.",
+        : "No citation checks are applied in no-doc mode.",
     },
     executionGateTask,
     workflowTask,
@@ -619,12 +627,12 @@ export default function HomePage() {
     refreshInterval: 15000,
   });
 
-  const [runtime, setRuntime] = useState<RuntimeMode>("ollama");
+  const [runtime] = useState<RuntimeMode>("openai_compat");
   const [customModels, setCustomModels] = useState("");
-  const [apiBaseUrl, setApiBaseUrl] = useState("");
-  const [apiKeyEnv, setApiKeyEnv] = useState("OPENAI_API_KEY");
+  const [apiBaseUrl, setApiBaseUrl] = useState(OPENROUTER_OPENAI_COMPAT_URL);
+  const [apiKeyEnv, setApiKeyEnv] = useState("OPENROUTER_API_KEY");
   const [docsPackPath, setDocsPackPath] = useState("");
-  const [requireCitations, setRequireCitations] = useState(true);
+  const [promptOverride, setPromptOverride] = useState("");
   const [runsPerScenario, setRunsPerScenario] = useState(1);
   const [running, setRunning] = useState(false);
   const [runSummary, setRunSummary] = useState("");
@@ -636,9 +644,8 @@ export default function HomePage() {
   const [activeMethodologyResult, setActiveMethodologyResult] = useState("");
 
   useEffect(() => {
-    if (runtime !== "openai_compat") return;
-    setApiBaseUrl((previous) => previous || HF_OPENAI_COMPAT_URL);
-  }, [runtime]);
+    setApiBaseUrl((previous) => previous || OPENROUTER_OPENAI_COMPAT_URL);
+  }, []);
 
   const latestRunModels = useMemo(() => {
     const models = [
@@ -651,18 +658,27 @@ export default function HomePage() {
 
   useEffect(() => {
     if (customModels.trim()) return;
-    if (!latestRunModels.length) return;
-    setCustomModels(latestRunModels.join(","));
+    if (latestRunModels.length >= 2) {
+      setCustomModels(latestRunModels.join(","));
+      return;
+    }
+    setCustomModels(DEFAULT_OPENROUTER_MODEL_SET);
   }, [customModels, latestRunModels]);
 
   useEffect(() => {
     const docs = data?.track.docs;
     if (!docs) return;
-    setRequireCitations(docs.requireCitations);
     if (!docsPackPath && docs.defaultPackPath) {
       setDocsPackPath(docs.defaultPackPath);
     }
   }, [data?.track.docs, docsPackPath]);
+
+  useEffect(() => {
+    const preview = data?.track?.prompt?.overridePreview;
+    if (promptOverride.trim()) return;
+    if (!preview) return;
+    setPromptOverride(preview);
+  }, [data?.track?.prompt?.overridePreview, promptOverride]);
 
   const availableDocModes = useMemo(() => {
     const fromTrack = (data?.track.docs?.modes ?? []).filter((mode): mode is DocMode => mode === "with_docs" || mode === "without_docs");
@@ -1176,7 +1192,8 @@ export default function HomePage() {
         apiKeyEnv: apiKeyEnv.trim() || undefined,
         docsPackPath: docsPackPath.trim() || undefined,
         docsTopK: 0,
-        requireCitations,
+        requireCitations: false,
+        promptOverride: promptOverride.trim() || undefined,
         runsPerScenario,
         maxTokens: 512,
         temperature: 0.1,
@@ -1664,18 +1681,10 @@ export default function HomePage() {
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <div className="space-y-4">
               <div className="space-y-1">
-                <label htmlFor="runtime-mode" className="text-sm font-medium">
-                  Inference runtime
-                </label>
-                <select
-                  id="runtime-mode"
-                  value={runtime}
-                  onChange={(event) => setRuntime(event.target.value as RuntimeMode)}
-                  className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
-                >
-                  <option value="ollama">Ollama (local models)</option>
-                  <option value="openai_compat">OpenAI-compatible (HF Router/OpenRouter/Hosted)</option>
-                </select>
+                <p className="text-sm font-medium">Inference runtime</p>
+                <p className="rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm text-stone-200">
+                  OpenAI-compatible (OpenRouter/Hosted)
+                </p>
               </div>
 
               <Card className="space-y-2 bg-soft p-4">
@@ -1686,46 +1695,41 @@ export default function HomePage() {
                   id="custom-models"
                   value={customModels}
                   onChange={(event) => setCustomModels(event.target.value)}
-                  placeholder="gpt-5.4-mini,gpt-5.4-nano,qwen3:4b-instruct,qwen2.5:0.5b"
+                  placeholder="openai/gpt-5.4-mini,openai/gpt-5.4-nano,qwen/qwen3-8b,qwen/qwen2.5-coder-7b-instruct,meta-llama/llama-3.1-8b-instruct,google/gemma-2-9b-it"
                   className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
                 />
                 <p className="text-xs text-stone-400">Effective models: {effectiveModels.length ? effectiveModels.join(", ") : "-"}</p>
                 <p className="text-xs text-stone-400">
-                  Mixed run is supported: OpenAI models and Ollama local tags can run together in one benchmark.
-                </p>
-                <p className="text-xs text-stone-400">
-                  Detected local Ollama models: {(data?.availableModels ?? []).length ? (data?.availableModels ?? []).join(", ") : "none detected"}
+                  Hosted-only mode: all models are executed through OpenRouter/OpenAI-compatible API.
                 </p>
               </Card>
 
-              {runtime === "openai_compat" ? (
-                <Card className="space-y-3 bg-soft p-4">
-                  <div className="space-y-1">
-                    <label htmlFor="api-base-url" className="text-sm font-medium">
-                      OpenAI-compatible base URL
-                    </label>
-                    <input
-                      id="api-base-url"
-                      value={apiBaseUrl}
-                      onChange={(event) => setApiBaseUrl(event.target.value)}
-                      placeholder={HF_OPENAI_COMPAT_URL}
-                      className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label htmlFor="api-key-env" className="text-sm font-medium">
-                      API key env var name
-                    </label>
-                    <input
-                      id="api-key-env"
-                      value={apiKeyEnv}
-                      onChange={(event) => setApiKeyEnv(event.target.value.toUpperCase())}
-                      placeholder="OPENAI_API_KEY"
-                      className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
-                    />
-                  </div>
-                </Card>
-              ) : null}
+              <Card className="space-y-3 bg-soft p-4">
+                <div className="space-y-1">
+                  <label htmlFor="api-base-url" className="text-sm font-medium">
+                    OpenAI-compatible base URL
+                  </label>
+                  <input
+                    id="api-base-url"
+                    value={apiBaseUrl}
+                    onChange={(event) => setApiBaseUrl(event.target.value)}
+                    placeholder={OPENROUTER_OPENAI_COMPAT_URL}
+                    className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="api-key-env" className="text-sm font-medium">
+                    API key env var name
+                  </label>
+                  <input
+                    id="api-key-env"
+                    value={apiKeyEnv}
+                    onChange={(event) => setApiKeyEnv(event.target.value.toUpperCase())}
+                    placeholder="OPENROUTER_API_KEY"
+                    className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
+                  />
+                </div>
+              </Card>
 
               <Card className="space-y-3 bg-soft p-4">
                 <p className="text-sm font-medium">Documentation settings</p>
@@ -1744,18 +1748,27 @@ export default function HomePage() {
                 <p className="text-xs text-stone-300">
                   Docs context mode uses full source pages from this pack (all chunks, no top-k truncation).
                 </p>
-                <label className="flex items-center gap-2 text-sm text-stone-200">
-                  <input
-                    type="checkbox"
-                    checked={requireCitations}
-                    onChange={(event) => setRequireCitations(event.target.checked)}
-                    className="h-4 w-4 accent-[#6a7448]"
-                  />
-                  Require citation coverage for passing
-                </label>
+                <p className="text-xs text-stone-300">
+                  Fairness mode: docs and no-docs runs use the same scoring/gating checks; only the injected docs context changes.
+                </p>
                 <p className="text-xs text-stone-400">
                   Official docs domains: {OFFICIAL_DOC_DOMAINS.join(", ")}
                 </p>
+              </Card>
+
+              <Card className="space-y-3 bg-soft p-4">
+                <p className="text-sm font-medium">Prompt override (optional)</p>
+                <p className="text-xs text-stone-300">
+                  This prompt is applied to both modes identically. The only mode difference is whether documentation excerpts are appended.
+                </p>
+                <textarea
+                  id="prompt-override"
+                  value={promptOverride}
+                  onChange={(event) => setPromptOverride(event.target.value)}
+                  rows={8}
+                  placeholder="You are a payment policy and workflow readiness evaluator. Return strict JSON only..."
+                  className="w-full rounded-lg border border-[#4a4a46] bg-soft px-3 py-2 text-sm"
+                />
               </Card>
             </div>
 

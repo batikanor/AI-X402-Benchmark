@@ -71,7 +71,12 @@ Per-case scoring combines:
 - base policy accuracy
 - controls F1
 - parse success
-- docs grounding and citation quality (if docs are enabled)
+- workflow execution success (for executable `real` cases)
+
+Fair comparison rule (`with_docs` vs `without_docs`):
+- prompt/scoring/gating are identical across modes
+- only one thing changes: `with_docs` appends official docs excerpts to the prompt
+- citation/doc-grounding fields are logged as diagnostics only; they are not pass/fail gates
 
 Execution eligibility gate for `real` cases requires:
 - expected policy for case is `allow`
@@ -79,24 +84,13 @@ Execution eligibility gate for `real` cases requires:
 - decision, approval, priority, risk all match
 - controls F1 >= 60
 
-Suite-level model score is weighted in `modelSummaryRows()`:
-- with docs enabled:
-  - base policy 21%
-  - controls F1 18%
-  - parse rate 10%
-  - strict full match 10%
-  - executed workflow success 11%
-  - docs grounding 12%
-  - required-source coverage 9%
-  - citation validity 5%
-  - latency score 4%
-- with docs disabled:
-  - base policy 28%
-  - controls F1 24%
-  - parse rate 14%
-  - strict full match 14%
-  - executed workflow success 15%
-  - latency score 5%
+Suite-level model score is weighted identically for both modes in `modelSummaryRows()`:
+- base policy 28%
+- controls F1 24%
+- parse rate 14%
+- strict full match 14%
+- executed workflow success 15%
+- latency score 5%
 
 Metric caveat:
 - `Executed pass %` is computed only over executed workflows.
@@ -126,7 +120,6 @@ See:
 
 - Node.js 20+
 - Python 3.10+
-- Ollama (for local runtime)
 
 ### 2) Install and configure
 
@@ -141,9 +134,15 @@ At minimum for local/dev operation:
 - Chainlink webhook URL (or use API fallback wiring)
 - Ledger approver URL (or use API fallback wiring)
 
-For OpenAI-hosted readiness runs:
+For hosted readiness runs (recommended):
+- `OPENROUTER_API_KEY` (required)
+- `OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`
+- `OPENROUTER_REFERER` and `OPENROUTER_TITLE` (optional but recommended)
+- `X402BENCH_MODEL_TIMEOUT_MS=90000` (recommended to avoid stalled provider calls hanging a run)
+
+For direct OpenAI runs:
 - `OPENAI_API_KEY` (required)
-- `OPENAI_BASE_URL=https://api.openai.com/v1` (recommended explicit default)
+- `OPENAI_BASE_URL=https://api.openai.com/v1`
 
 Run env diagnostics:
 
@@ -172,7 +171,10 @@ Optional explicit mode override:
 node scripts/run_llm_readiness_benchmark.mjs \
   --config config/benchmark.config.json \
   --suite readiness_bench/suite.json \
-  --models qwen3:4b-instruct,phi4:14b \
+  --runtime openai_compat \
+  --api-base-url https://openrouter.ai/api/v1 \
+  --api-key-env OPENROUTER_API_KEY \
+  --models openai/gpt-5.4-mini,openai/gpt-5.4-nano,qwen/qwen3-8b,qwen/qwen2.5-coder-7b-instruct,meta-llama/llama-3.1-8b-instruct,google/gemma-2-9b-it \
   --doc-modes with_docs,without_docs
 ```
 
@@ -182,11 +184,17 @@ Wider model set:
 npm run readiness:bench:wide
 ```
 
-Hosted OpenAI-compatible endpoint (HF Router example):
+Hosted OpenAI-compatible endpoint (OpenRouter example):
 
 ```bash
-export HF_TOKEN=hf_xxx
-npm run readiness:bench:hf
+node scripts/run_llm_readiness_benchmark.mjs \
+  --config config/benchmark.config.json \
+  --suite readiness_bench/suite.json \
+  --runtime openai_compat \
+  --api-base-url https://openrouter.ai/api/v1 \
+  --api-key-env OPENROUTER_API_KEY \
+  --models openai/gpt-5.4-mini,openai/gpt-5.4-nano,qwen/qwen3-8b,qwen/qwen2.5-coder-7b-instruct,meta-llama/llama-3.1-8b-instruct,google/gemma-2-9b-it \
+  --doc-modes with_docs,without_docs
 ```
 
 Official OpenAI cheap mini/nano run:
@@ -196,22 +204,24 @@ Official OpenAI cheap mini/nano run:
 npm run readiness:bench:openai-cheap
 ```
 
-Mixed-provider run in one benchmark (OpenAI + local Ollama):
+Prompt override (same prompt in both docs modes):
 
 ```bash
 node scripts/run_llm_readiness_benchmark.mjs \
   --config config/benchmark.config.json \
   --suite readiness_bench/suite.json \
   --runtime openai_compat \
-  --api-base-url https://api.openai.com/v1 \
-  --api-key-env OPENAI_API_KEY \
-  --models gpt-5.4-mini,gpt-5.4-nano,qwen3:4b-instruct,qwen2.5:0.5b
+  --api-base-url https://openrouter.ai/api/v1 \
+  --api-key-env OPENROUTER_API_KEY \
+  --models openai/gpt-5.4-mini,openai/gpt-5.4-nano,qwen/qwen3-8b,qwen/qwen2.5-coder-7b-instruct,meta-llama/llama-3.1-8b-instruct,google/gemma-2-9b-it \
+  --prompt-override "Return strict JSON only using the benchmark schema and prioritize policy-safe decisions."
 ```
 
 Routing rules:
-- OpenAI-style IDs (for example `gpt-5.4-mini`) use the OpenAI-compatible endpoint.
-- Ollama-style tags (for example `qwen3:4b-instruct`) run locally through Ollama.
-- Optional explicit prefixes are supported: `openai:<model>` or `ollama:<model>`.
+- All readiness models run through OpenAI-compatible hosted endpoints (OpenRouter/OpenAI).
+- IDs with provider/model slash (for example `qwen/qwen3-8b`) are recommended for OpenRouter consistency.
+- Optional explicit `openai:<model>` prefix is supported.
+- `ollama:` model tags are rejected by the readiness runner.
 
 Latest mini/nano model IDs are discovered from your account via `/v1/models`.
 As of April 5, 2026 in this workspace account they are:

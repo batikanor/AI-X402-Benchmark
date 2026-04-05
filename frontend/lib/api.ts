@@ -141,6 +141,10 @@ export interface ReadinessDashboardResponse {
       topK: number;
       requireCitations: boolean;
     };
+    prompt?: {
+      overrideEnabled?: boolean;
+      overridePreview?: string | null;
+    };
     statusNote: string;
     integrationStatus: {
       isFullyConfigured: boolean;
@@ -482,12 +486,13 @@ export async function runBenchmark(strict: boolean): Promise<RunResponse> {
 
 export async function runReadinessBenchmark(input: {
   models: string[];
-  runtime: "ollama" | "openai_compat";
+  runtime: "openai_compat";
   apiBaseUrl?: string;
   apiKeyEnv?: string;
   docsPackPath?: string;
   docsTopK?: number;
   requireCitations?: boolean;
+  promptOverride?: string;
   runsPerScenario: number;
   maxTokens: number;
   temperature: number;

@@ -28,6 +28,14 @@ MODEL_NAME_REGEX = re.compile(r"^[A-Za-z0-9._:/-]+$")
 ENV_NAME_REGEX = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 MODEL_PARAM_REGEX = re.compile(r"parameters\s+([0-9]+(?:\.[0-9]+)?)B", re.IGNORECASE)
 NAME_PARAM_REGEX = re.compile(r"([0-9]+(?:\.[0-9]+)?)b", re.IGNORECASE)
+DEFAULT_HOSTED_READINESS_MODELS = [
+    "openai/gpt-5.4-mini",
+    "openai/gpt-5.4-nano",
+    "qwen/qwen3-8b",
+    "qwen/qwen2.5-coder-7b-instruct",
+    "meta-llama/llama-3.1-8b-instruct",
+    "google/gemma-2-9b-it",
+]
 
 RUN_COND = threading.Condition()
 RUN_IN_PROGRESS = False
@@ -162,15 +170,16 @@ class LlmRunRequest(BaseModel):
 
 class ReadinessRunRequest(BaseModel):
     models: list[str] = Field(min_length=2, max_length=8)
-    runtime: str = Field(default="ollama")
+    runtime: str = Field(default="openai_compat")
     apiBaseUrl: str | None = Field(default=None, max_length=1024)
     apiKeyEnv: str = Field(default="OPENAI_API_KEY", max_length=64)
     docsPackPath: str | None = Field(default=None, max_length=2048)
     docsTopK: int = Field(default=0, ge=0, le=2000)
-    requireCitations: bool = Field(default=True)
+    requireCitations: bool = Field(default=False)
     runsPerScenario: int = Field(default=1, ge=1, le=3)
     maxTokens: int = Field(default=512, ge=64, le=4096)
     temperature: float = Field(default=0.1, ge=0, le=1)
+    promptOverride: str | None = Field(default=None, max_length=20000)
 
 
 class RunResponse(BaseModel):
@@ -580,14 +589,15 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
     release = readiness_suite.get("release", {}) if isinstance(readiness_suite.get("release"), dict) else {}
     meta = report.get("meta", {}) if isinstance(report, dict) and isinstance(report.get("meta"), dict) else {}
     docs_meta = meta.get("docs", {}) if isinstance(meta.get("docs"), dict) else {}
+    prompt_meta = meta.get("prompt", {}) if isinstance(meta.get("prompt"), dict) else {}
+    default_docs_available = READINESS_DEFAULT_DOCS_PACK_PATH.exists()
     docs_modes_raw = docs_meta.get("modes")
     docs_modes = docs_modes_raw if isinstance(docs_modes_raw, list) else []
     docs_modes = [str(item) for item in docs_modes if str(item) in {"with_docs", "without_docs"}]
     if not docs_modes:
         docs_modes = ["with_docs", "without_docs"] if default_docs_available else ["without_docs"]
     integration_status = _integration_status(config)
-    runtime_used = str(meta.get("runtime") or "ollama")
-    default_docs_available = READINESS_DEFAULT_DOCS_PACK_PATH.exists()
+    runtime_used = str(meta.get("runtime") or "openai_compat")
 
     return {
         "name": "LLM readiness for payment workflows",
@@ -605,7 +615,7 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
         "suitePath": str(READINESS_SUITE_PATH),
         "scenarioCount": len(cases),
         "runtimeUsed": runtime_used,
-        "supportedRuntimes": ["ollama", "openai_compat"],
+        "supportedRuntimes": ["openai_compat"],
         "docs": {
             "defaultPackAvailable": default_docs_available,
             "defaultPackPath": str(READINESS_DEFAULT_DOCS_PACK_PATH) if default_docs_available else None,
@@ -615,7 +625,11 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
             "version": docs_meta.get("version"),
             "sourceCount": docs_meta.get("sourceCount", 0),
             "topK": docs_meta.get("topK", 0),
-            "requireCitations": docs_meta.get("requireCitations", True),
+            "requireCitations": False,
+        },
+        "prompt": {
+            "overrideEnabled": bool(prompt_meta.get("overrideEnabled", False)),
+            "overridePreview": prompt_meta.get("overridePreview"),
         },
         "integrationStatus": integration_status,
         "statusNote": (
@@ -752,8 +766,11 @@ def _build_model_comparisons(models_by_doc_mode: dict[str, list[dict[str, Any]]]
 
 
 def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:
-    models = _list_ollama_models()
-    recommended_models = _recommended_models(models)
+    meta = report.get("meta", {}) if isinstance(report.get("meta"), dict) else {}
+    latest_models_raw = meta.get("models") if isinstance(meta.get("models"), list) else []
+    latest_models = [str(item).strip() for item in latest_models_raw if str(item).strip()]
+    models = latest_models if latest_models else DEFAULT_HOSTED_READINESS_MODELS
+    recommended_models = models[:]
     definition = _readiness_definition(report)
     templates = _scenario_templates()
 
@@ -778,7 +795,6 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
             "scenarios": templates,
         }
 
-    meta = report.get("meta", {}) if isinstance(report.get("meta"), dict) else {}
     summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
     model_rows = summary.get("models", []) if isinstance(summary.get("models"), list) else []
     by_mode_raw = summary.get("byDocMode", {}) if isinstance(summary.get("byDocMode"), dict) else {}
@@ -855,7 +871,7 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
             "finishedAt": meta.get("finishedAt"),
             "scenarioCount": meta.get("scenarioCount", meta.get("caseCount", 0)),
             "runsPerScenario": meta.get("runsPerScenario", 0),
-            "runtime": meta.get("runtime", "ollama"),
+            "runtime": meta.get("runtime", "openai_compat"),
             "suiteName": meta.get("suiteName", definition.get("suiteName")),
             "suiteVersion": meta.get("suiteVersion", definition.get("suiteVersion")),
             "models": meta.get("models", []),
@@ -1163,8 +1179,8 @@ def run_readiness_benchmark(
             return cached
 
     runtime = payload.runtime.strip().lower()
-    if runtime not in {"ollama", "openai_compat"}:
-        raise HTTPException(status_code=422, detail="runtime must be one of: ollama, openai_compat")
+    if runtime != "openai_compat":
+        raise HTTPException(status_code=422, detail="runtime must be openai_compat")
 
     api_key_env = payload.apiKeyEnv.strip().upper()
     if not ENV_NAME_REGEX.fullmatch(api_key_env):
@@ -1173,13 +1189,17 @@ def run_readiness_benchmark(
             detail="apiKeyEnv must be a valid environment variable name (A-Z, 0-9, underscore).",
         )
 
-    available_models = _list_ollama_models()
     models = _validate_models_or_raise(
         payload.models,
-        available_models,
-        require_available=runtime == "ollama",
-        source_label="local Ollama",
+        [],
+        require_available=False,
+        source_label="OpenAI-compatible provider",
     )
+    if any(str(model).lower().startswith("ollama:") for model in models):
+        raise HTTPException(
+            status_code=422,
+            detail="ollama:* model tags are disabled for readiness runs. Use hosted OpenAI-compatible model IDs.",
+        )
 
     started = time.perf_counter()
     run_state = _start_readiness_run_or_join(_readiness_join_wait_seconds())
@@ -1238,7 +1258,7 @@ def run_readiness_benchmark(
             "--docs-top-k",
             str(payload.docsTopK),
             "--require-citations",
-            str(payload.requireCitations).lower(),
+            "false",
             "--doc-modes",
             "with_docs,without_docs",
             "--runs-per-scenario",
@@ -1256,6 +1276,8 @@ def run_readiness_benchmark(
             command.extend(["--docs-pack", payload.docsPackPath.strip()])
         elif READINESS_DEFAULT_DOCS_PACK_PATH.exists():
             command.extend(["--docs-pack", str(READINESS_DEFAULT_DOCS_PACK_PATH)])
+        if payload.promptOverride and payload.promptOverride.strip():
+            command.extend(["--prompt-override", payload.promptOverride.strip()])
 
         try:
             process = subprocess.run(
