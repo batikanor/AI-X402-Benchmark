@@ -63,6 +63,7 @@ flowchart TD
 The benchmark intentionally uses a hybrid design:
 - fixed structured prompt + strict JSON output for deterministic scoring
 - case-level docs excerpts from official sources for grounding pressure
+- paired `without_docs` runs to measure retained sponsor/protocol knowledge without retrieval context
 
 This is deliberate: stable scoring plus realistic documentation-following behavior.
 

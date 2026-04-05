@@ -6,6 +6,7 @@ import { BenchmarkRunner } from '../src/core/runner.js';
 import { Logger } from '../src/utils/logger.js';
 
 const SUPPORTED_RUNTIMES = new Set(['ollama', 'openai_compat']);
+const SUPPORTED_DOC_MODES = new Set(['with_docs', 'without_docs']);
 
 function parseArgs(argv) {
   const options = {
@@ -23,6 +24,7 @@ function parseArgs(argv) {
     docsPack: '',
     docsTopK: 5,
     requireCitations: true,
+    docModes: 'with_docs,without_docs',
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -101,6 +103,10 @@ function parseArgs(argv) {
         else if (['false', '0', 'no'].includes(value.toLowerCase())) options.requireCitations = false;
         else throw new Error('--require-citations must be true/false');
         break;
+      case '--doc-modes':
+        if (!value) throw new Error('--doc-modes requires a value');
+        options.docModes = value.trim();
+        break;
       default:
         throw new Error(`Unknown flag: ${flag}`);
     }
@@ -126,7 +132,29 @@ function parseArgs(argv) {
     throw new Error('docsTopK must be an integer between 1 and 12.');
   }
 
+  const normalizedDocModes = normalizeDocModes(options.docModes);
+  if (!normalizedDocModes.length) {
+    throw new Error('At least one doc mode is required. Use with_docs, without_docs, or both.');
+  }
+  options.docModes = normalizedDocModes.join(',');
+
   return options;
+}
+
+function normalizeDocModes(value) {
+  const items = String(value || '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  const unique = [];
+  for (const mode of items) {
+    if (!SUPPORTED_DOC_MODES.has(mode)) {
+      throw new Error(`Unsupported doc mode: ${mode}. Supported: ${Array.from(SUPPORTED_DOC_MODES).join(', ')}`);
+    }
+    if (!unique.includes(mode)) unique.push(mode);
+  }
+  return unique;
 }
 
 function round(value, digits = 2) {
@@ -912,8 +940,28 @@ function modelSummaryRows(results, expectedPerModel, docsEnabled) {
   });
 }
 
+function docModeLabel(mode) {
+  return mode === 'without_docs' ? 'Without Docs' : 'With Docs';
+}
+
+function summaryRowsForMode(report, mode) {
+  const byMode = report?.summary?.byDocMode;
+  if (byMode && typeof byMode === 'object' && Array.isArray(byMode[mode])) {
+    return byMode[mode];
+  }
+
+  if (mode === 'with_docs' && Array.isArray(report?.summary?.models)) {
+    return report.summary.models;
+  }
+
+  return [];
+}
+
 function markdownReport(report) {
   const lines = [];
+  const docModes = Array.isArray(report?.meta?.docs?.modes) && report.meta.docs.modes.length
+    ? report.meta.docs.modes
+    : [report?.meta?.docs?.enabled ? 'with_docs' : 'without_docs'];
   lines.push('# x402Bench LLM Readiness Benchmark');
   lines.push('');
   lines.push(`- Run ID: ${report.meta.runId}`);
@@ -923,26 +971,30 @@ function markdownReport(report) {
   lines.push(`- Models: ${report.meta.models.join(', ')}`);
   lines.push(`- Cases: ${report.meta.caseCount}`);
   lines.push(`- Runs per case: ${report.meta.runsPerScenario}`);
-  lines.push(`- Documentation grounding: ${report.meta.docs.enabled ? 'enabled' : 'disabled'}`);
-  if (report.meta.docs.enabled) {
+  lines.push(`- Documentation modes: ${docModes.join(', ')}`);
+  if (docModes.includes('with_docs')) {
     lines.push(`- Docs pack: ${report.meta.docs.name} (${report.meta.docs.version})`);
     lines.push(`- Docs sources: ${report.meta.docs.sourceCount}`);
     lines.push(`- Docs excerpts per case: ${report.meta.docs.topK}`);
     lines.push(`- Citations required: ${report.meta.docs.requireCitations ? 'yes' : 'no'}`);
   }
-  lines.push('');
-  lines.push('## Leaderboard');
-  lines.push('');
-  lines.push('| Model | Overall | Decision Accuracy % | Base Policy % | Controls F1 % | Parse Rate % | Docs Grounded % | Required Source Coverage % | Citation Validity % | Workflow Success % | Avg Latency ms |');
-  lines.push('| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
-  for (const row of report.summary.models) {
-    lines.push(`| ${row.model} | ${row.overallScore} | ${row.decisionAccuracyPct} | ${row.basePolicyAccuracyPct} | ${row.controlsF1Pct} | ${row.parseRatePct} | ${row.docsGroundingRatePct} | ${row.requiredSourceCoveragePct} | ${row.citationValidityPct} | ${row.workflowSuccessRatePct} | ${row.avgTotalLatencyMs} |`);
+
+  for (const mode of docModes) {
+    const rows = summaryRowsForMode(report, mode);
+    lines.push('');
+    lines.push(`## Leaderboard (${docModeLabel(mode)})`);
+    lines.push('');
+    lines.push('| Model | Overall | Decision Accuracy % | Base Policy % | Controls F1 % | Parse Rate % | Docs Grounded % | Required Source Coverage % | Citation Validity % | Workflow Success % | Avg Latency ms |');
+    lines.push('| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
+    for (const row of rows) {
+      lines.push(`| ${row.model} | ${row.overallScore} | ${row.decisionAccuracyPct} | ${row.basePolicyAccuracyPct} | ${row.controlsF1Pct} | ${row.parseRatePct} | ${row.docsGroundingRatePct} | ${row.requiredSourceCoveragePct} | ${row.citationValidityPct} | ${row.workflowSuccessRatePct} | ${row.avgTotalLatencyMs} |`);
+    }
   }
   lines.push('');
   lines.push('## Case Evidence');
   lines.push('');
   for (const row of report.results) {
-    lines.push(`### ${row.caseName} (${row.model}, attempt ${row.attempt})`);
+    lines.push(`### ${row.caseName} (${row.model}, ${docModeLabel(row.docMode || 'with_docs')}, attempt ${row.attempt})`);
     lines.push(`- Decision parse: ${row.llm.parseOk ? 'ok' : 'failed'}`);
     lines.push(`- Expected: decision=${row.expected.decision}, approvalRequired=${row.expected.approvalRequired}, priority=${row.expected.priority}, risk=${row.expected.riskLevel}`);
     lines.push(`- Model: decision=${row.llm.decision}, approvalRequired=${row.llm.approvalRequired}, priority=${row.llm.priority}, risk=${row.llm.riskLevel}`);
@@ -1011,6 +1063,10 @@ async function main() {
 
   const suite = loadSuite({ suitePath, config });
   const docsPack = loadDocsPack(docsPackPath);
+  const docModes = normalizeDocModes(options.docModes);
+  if (docModes.includes('with_docs') && !docsPack.enabled) {
+    throw new Error('with_docs mode requested but docs pack is unavailable. Provide --docs-pack or build readiness_bench/docs_cache/default_docs_pack.json.');
+  }
 
   const logger = new Logger(process.env.X402BENCH_LOG_LEVEL || 'warn');
   const runner = new BenchmarkRunner(config, logger);
@@ -1023,170 +1079,182 @@ async function main() {
 
   const results = [];
   const caseCount = suite.cases.length;
-  const expectedEvaluationsPerModel = caseCount * options.runsPerScenario;
+  const expectedEvaluationsPerModel = caseCount * options.runsPerScenario * docModes.length;
+  const expectedEvaluationsPerModelPerMode = caseCount * options.runsPerScenario;
 
   for (const model of models) {
-    for (const testCase of suite.cases) {
-      for (let attempt = 1; attempt <= options.runsPerScenario; attempt += 1) {
-        const docExcerpts = selectDocExcerpts({
-          docsPack,
-          testCase,
-          topK: options.docsTopK,
-        });
-        const prompt = buildPrompt({
-          testCase,
-          expected: testCase.expected,
-          controlVocabulary: suite.controlVocabulary,
-          docExcerpts,
-        });
-
-        let llmOutput = '';
-        let llmLatencyMs = 0;
-        let doneReason = null;
-        let llmError = null;
-        let modelEndpoint = '';
-
-        try {
-          const response = await callModel({
-            runtime: options.runtime,
-            model,
-            prompt,
-            maxTokens: options.maxTokens,
-            temperature: options.temperature,
-            apiBaseUrl: options.apiBaseUrl,
-            apiKeyEnv: options.apiKeyEnv,
-          });
-          llmOutput = response.output;
-          llmLatencyMs = response.latencyMs;
-          doneReason = response.doneReason;
-          modelEndpoint = response.endpoint;
-        } catch (error) {
-          llmLatencyMs = 0;
-          llmError = error instanceof Error ? error.message : String(error);
-        }
-
-        const parsed = llmError
-          ? {
-              parseOk: false,
-              decision: 'unknown',
-              approvalRequired: null,
-              priority: 'unknown',
-              riskLevel: 'unknown',
-              requiredControls: [],
-              citations: [],
-              reason: llmError,
-            }
-          : parseModelDecision(llmOutput);
-
-        const evalResult = evaluateDecision(
-          testCase.expected,
-          parsed,
-          testCase.executionMode,
-          {
-            docsEnabled: docsPack.enabled,
-            requireCitations: options.requireCitations,
-            requiredSourceIds: testCase.requiredSources,
-            providedExcerptIds: docExcerpts.map((item) => item.chunkId),
-          },
-        );
-        const gateFailures = evalResult.executionEligible
-          ? []
-          : executionGateFailureReasons({
+    for (const docMode of docModes) {
+      const docsEnabled = docMode === 'with_docs';
+      for (const testCase of suite.cases) {
+        for (let attempt = 1; attempt <= options.runsPerScenario; attempt += 1) {
+          const docExcerpts = docsEnabled
+            ? selectDocExcerpts({
+              docsPack,
+              testCase,
+              topK: options.docsTopK,
+            })
+            : [];
+          const prompt = buildPrompt({
             testCase,
+            expected: testCase.expected,
+            controlVocabulary: suite.controlVocabulary,
+            docExcerpts,
+          });
+
+          let llmOutput = '';
+          let llmLatencyMs = 0;
+          let doneReason = null;
+          let llmError = null;
+          let modelEndpoint = '';
+
+          try {
+            const response = await callModel({
+              runtime: options.runtime,
+              model,
+              prompt,
+              maxTokens: options.maxTokens,
+              temperature: options.temperature,
+              apiBaseUrl: options.apiBaseUrl,
+              apiKeyEnv: options.apiKeyEnv,
+            });
+            llmOutput = response.output;
+            llmLatencyMs = response.latencyMs;
+            doneReason = response.doneReason;
+            modelEndpoint = response.endpoint;
+          } catch (error) {
+            llmLatencyMs = 0;
+            llmError = error instanceof Error ? error.message : String(error);
+          }
+
+          const parsed = llmError
+            ? {
+                parseOk: false,
+                decision: 'unknown',
+                approvalRequired: null,
+                priority: 'unknown',
+                riskLevel: 'unknown',
+                requiredControls: [],
+                citations: [],
+                reason: llmError,
+              }
+            : parseModelDecision(llmOutput);
+
+          const evalResult = evaluateDecision(
+            testCase.expected,
             parsed,
-            evalResult,
-          });
+            testCase.executionMode,
+            {
+              docsEnabled,
+              requireCitations: docsEnabled ? options.requireCitations : false,
+              requiredSourceIds: testCase.requiredSources,
+              providedExcerptIds: docExcerpts.map((item) => item.chunkId),
+            },
+          );
+          const gateFailures = evalResult.executionEligible
+            ? []
+            : executionGateFailureReasons({
+              testCase,
+              parsed,
+              evalResult,
+            });
 
-        let workflow = {
-          executed: false,
-          status: 'skipped',
-          retryCount: 0,
-          txHash: null,
-          workflowId: null,
-          durationMs: 0,
-          notes: [],
-        };
-
-        if (evalResult.executionEligible) {
-          const workflowRun = await runner.runScenario({
-            runId: `${runId}-${model.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12)}`,
-            scenario: testCase.scenario,
-          });
-
-          workflow = {
-            executed: true,
-            status: workflowRun.status,
-            retryCount: workflowRun.retryCount || 0,
-            txHash: workflowRun.txHash || null,
-            workflowId: workflowRun.workflowId || null,
-            durationMs: workflowRun.durationMs?.total || 0,
-            notes: workflowRun.notes || [],
+          let workflow = {
+            executed: false,
+            status: 'skipped',
+            retryCount: 0,
+            txHash: null,
+            workflowId: null,
+            durationMs: 0,
+            notes: [],
           };
-        } else {
-          const notes = [];
-          if (!parsed.parseOk) notes.push('Model output is not parseable as strict JSON decision.');
-          if (!evalResult.decisionMatch) notes.push('Decision mismatch versus expected policy action.');
-          if (!evalResult.approvalMatch) notes.push('approvalRequired mismatch versus expected policy action.');
-          if (!evalResult.priorityMatch) notes.push('Priority mismatch versus requested workflow priority.');
-          if (!evalResult.riskMatch) notes.push('Risk-level mismatch versus benchmark expectation.');
-          if (evalResult.controlsF1Pct < 60) notes.push('Control selection quality below readiness threshold.');
-          if (docsPack.enabled && !evalResult.docsGrounded) {
-            notes.push('Documentation grounding check failed (missing/invalid citations or missing required source coverage).');
-          }
 
-          workflow.notes = notes;
-          if (testCase.executionMode !== 'real') {
-            workflow.status = 'decision_only_case';
-          } else if (testCase.expected.decision === 'block') {
-            workflow.status = 'blocked_by_policy_expectation';
+          if (evalResult.executionEligible) {
+            const workflowRun = await runner.runScenario({
+              runId: `${runId}-${model.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12)}-${docMode}`,
+              scenario: testCase.scenario,
+            });
+
+            workflow = {
+              executed: true,
+              status: workflowRun.status,
+              retryCount: workflowRun.retryCount || 0,
+              txHash: workflowRun.txHash || null,
+              workflowId: workflowRun.workflowId || null,
+              durationMs: workflowRun.durationMs?.total || 0,
+              notes: workflowRun.notes || [],
+            };
           } else {
-            const primary = gateFailures[0] || 'unknown_gate_failure';
-            workflow.status = `not_executed_${primary}`;
+            const notes = [];
+            if (!parsed.parseOk) notes.push('Model output is not parseable as strict JSON decision.');
+            if (!evalResult.decisionMatch) notes.push('Decision mismatch versus expected policy action.');
+            if (!evalResult.approvalMatch) notes.push('approvalRequired mismatch versus expected policy action.');
+            if (!evalResult.priorityMatch) notes.push('Priority mismatch versus requested workflow priority.');
+            if (!evalResult.riskMatch) notes.push('Risk-level mismatch versus benchmark expectation.');
+            if (evalResult.controlsF1Pct < 60) notes.push('Control selection quality below readiness threshold.');
+            if (docsEnabled && !evalResult.docsGrounded) {
+              notes.push('Documentation grounding check failed (missing/invalid citations or missing required source coverage).');
+            }
+
+            workflow.notes = notes;
+            if (testCase.executionMode !== 'real') {
+              workflow.status = 'decision_only_case';
+            } else if (testCase.expected.decision === 'block') {
+              workflow.status = 'blocked_by_policy_expectation';
+            } else {
+              const primary = gateFailures[0] || 'unknown_gate_failure';
+              workflow.status = `not_executed_${primary}`;
+            }
           }
+
+          const totalLatencyMs = round(llmLatencyMs + Number(workflow.durationMs || 0));
+
+          results.push({
+            model,
+            docMode,
+            caseId: testCase.id,
+            caseName: testCase.name,
+            scenarioId: testCase.scenario.id,
+            scenarioName: testCase.scenario.name,
+            executionMode: testCase.executionMode,
+            attempt,
+            expected: testCase.expected,
+            llm: {
+              parseOk: parsed.parseOk,
+              decision: parsed.decision,
+              approvalRequired: parsed.approvalRequired,
+              priority: parsed.priority,
+              riskLevel: parsed.riskLevel,
+              requiredControls: parsed.requiredControls,
+              citations: parsed.citations,
+              reason: parsed.reason,
+              latencyMs: llmLatencyMs,
+              rawOutput: llmOutput,
+              doneReason,
+              error: llmError,
+              endpoint: modelEndpoint,
+            },
+            docs: {
+              enabled: docsEnabled,
+              requiredSources: testCase.requiredSources,
+              providedExcerptIds: docExcerpts.map((item) => item.chunkId),
+              providedSourceIds: uniqueStrings(docExcerpts.map((item) => item.sourceId)),
+            },
+            evaluation: evalResult,
+            executionGateFailures: gateFailures,
+            workflow,
+            totalLatencyMs,
+          });
         }
-
-        const totalLatencyMs = round(llmLatencyMs + Number(workflow.durationMs || 0));
-
-        results.push({
-          model,
-          caseId: testCase.id,
-          caseName: testCase.name,
-          scenarioId: testCase.scenario.id,
-          scenarioName: testCase.scenario.name,
-          executionMode: testCase.executionMode,
-          attempt,
-          expected: testCase.expected,
-          llm: {
-            parseOk: parsed.parseOk,
-            decision: parsed.decision,
-            approvalRequired: parsed.approvalRequired,
-            priority: parsed.priority,
-            riskLevel: parsed.riskLevel,
-            requiredControls: parsed.requiredControls,
-            citations: parsed.citations,
-            reason: parsed.reason,
-            latencyMs: llmLatencyMs,
-            rawOutput: llmOutput,
-            doneReason,
-            error: llmError,
-            endpoint: modelEndpoint,
-          },
-          docs: {
-            enabled: docsPack.enabled,
-            requiredSources: testCase.requiredSources,
-            providedExcerptIds: docExcerpts.map((item) => item.chunkId),
-            providedSourceIds: uniqueStrings(docExcerpts.map((item) => item.sourceId)),
-          },
-          evaluation: evalResult,
-          executionGateFailures: gateFailures,
-          workflow,
-          totalLatencyMs,
-        });
       }
     }
   }
 
-  const summaryRows = modelSummaryRows(results, expectedEvaluationsPerModel, docsPack.enabled);
+  const summaryByDocMode = {};
+  for (const mode of docModes) {
+    const modeRows = results.filter((row) => row.docMode === mode);
+    summaryByDocMode[mode] = modelSummaryRows(modeRows, expectedEvaluationsPerModelPerMode, mode === 'with_docs');
+  }
+  const summaryRows = summaryByDocMode.with_docs || summaryByDocMode.without_docs || [];
 
   const report = {
     meta: {
@@ -1205,7 +1273,8 @@ async function main() {
       suitePath,
       integrationBaseUrl: options.integrationBaseUrl || null,
       docs: {
-        enabled: docsPack.enabled,
+        enabled: docModes.includes('with_docs'),
+        modes: docModes,
         path: docsPack.path,
         name: docsPack.name,
         version: docsPack.version,
@@ -1217,14 +1286,17 @@ async function main() {
     definition: {
       name: 'LLM readiness for payment workflows',
       whatIsBenchmarked:
-        'Policy correctness, risk calibration, control selection quality, documentation-grounded reasoning, and real workflow execution reliability for payment flows.',
+        'Policy correctness, risk calibration, control selection quality, documentation-grounded reasoning, retained sponsor knowledge without docs context, and real workflow execution reliability for payment flows.',
       mocked: false,
       sponsors: ['Hedera', 'Chainlink', 'Ledger'],
-      docsGrounded: docsPack.enabled,
+      docsGrounded: docModes.includes('with_docs'),
     },
     summary: {
       models: summaryRows,
+      byDocMode: summaryByDocMode,
       totalEvaluations: results.length,
+      totalEvaluationsPerModel: expectedEvaluationsPerModel,
+      totalEvaluationsPerModelPerMode: expectedEvaluationsPerModelPerMode,
     },
     results,
   };

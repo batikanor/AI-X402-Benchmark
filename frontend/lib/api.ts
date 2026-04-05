@@ -1,6 +1,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 const READINESS_FALLBACK_PATH = "/readiness-dashboard-fallback.json";
 const READINESS_TIMEOUT_MS = 5000;
+export type DocMode = "with_docs" | "without_docs";
 
 export interface RunResponse {
   ok: boolean;
@@ -133,6 +134,7 @@ export interface ReadinessDashboardResponse {
       defaultPackAvailable: boolean;
       defaultPackPath: string | null;
       enabled: boolean;
+      modes?: DocMode[];
       name?: string | null;
       version?: string | null;
       sourceCount: number;
@@ -162,6 +164,7 @@ export interface ReadinessDashboardResponse {
     models: string[];
     docs: {
       enabled?: boolean;
+      modes?: DocMode[];
       path?: string | null;
       name?: string | null;
       version?: string | null;
@@ -169,6 +172,7 @@ export interface ReadinessDashboardResponse {
       topK?: number;
       requireCitations?: boolean;
     };
+    docsModes?: DocMode[];
     totalEvaluations: number;
   } | null;
   models: Array<{
@@ -193,8 +197,65 @@ export interface ReadinessDashboardResponse {
     totalEvaluations: number;
     expectedEvaluations: number;
   }>;
+  modelsByDocMode?: {
+    with_docs: Array<{
+      model: string;
+      paramsBillions: number | null;
+      overallScore: number;
+      decisionAccuracyPct: number;
+      basePolicyAccuracyPct: number;
+      controlsF1Pct: number;
+      parseRatePct: number;
+      fullMatchRatePct: number;
+      docsGroundingRatePct: number;
+      citationValidityPct: number;
+      requiredSourceCoveragePct: number;
+      executionEligibilityPct: number;
+      workflowSuccessRatePct: number;
+      executedScenarios: number;
+      successfulExecutions: number;
+      failedExecutions: number;
+      avgTotalLatencyMs: number;
+      p95TotalLatencyMs: number;
+      totalEvaluations: number;
+      expectedEvaluations: number;
+    }>;
+    without_docs: Array<{
+      model: string;
+      paramsBillions: number | null;
+      overallScore: number;
+      decisionAccuracyPct: number;
+      basePolicyAccuracyPct: number;
+      controlsF1Pct: number;
+      parseRatePct: number;
+      fullMatchRatePct: number;
+      docsGroundingRatePct: number;
+      citationValidityPct: number;
+      requiredSourceCoveragePct: number;
+      executionEligibilityPct: number;
+      workflowSuccessRatePct: number;
+      executedScenarios: number;
+      successfulExecutions: number;
+      failedExecutions: number;
+      avgTotalLatencyMs: number;
+      p95TotalLatencyMs: number;
+      totalEvaluations: number;
+      expectedEvaluations: number;
+    }>;
+  };
+  modelComparisons?: Array<{
+    model: string;
+    paramsBillions: number | null;
+    withDocs: ReadinessDashboardResponse["models"][number] | null;
+    withoutDocs: ReadinessDashboardResponse["models"][number] | null;
+    deltaOverallScore: number | null;
+    deltaDecisionAccuracyPct: number | null;
+    deltaWorkflowSuccessRatePct: number | null;
+    deltaDocsGroundingRatePct: number | null;
+  }>;
   results: Array<{
     model: string;
+    docMode?: DocMode;
     caseId: string;
     caseName: string;
     executionMode: "real" | "decision_only";

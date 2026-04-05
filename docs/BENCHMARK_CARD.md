@@ -59,7 +59,9 @@ Important distinction:
 ## 5) Execution model
 
 For each model and case:
-1. Construct strict structured prompt with scenario + selected doc excerpts.
+1. Construct strict structured prompt in two modes:
+   - with selected doc excerpts (`with_docs`)
+   - with no doc excerpts (`without_docs`)
 2. Parse JSON response.
 3. Score decision and docs-grounding quality.
 4. If case is `real` and execution gate passes, run live workflow adapters.

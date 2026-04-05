@@ -580,6 +580,11 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
     release = readiness_suite.get("release", {}) if isinstance(readiness_suite.get("release"), dict) else {}
     meta = report.get("meta", {}) if isinstance(report, dict) and isinstance(report.get("meta"), dict) else {}
     docs_meta = meta.get("docs", {}) if isinstance(meta.get("docs"), dict) else {}
+    docs_modes_raw = docs_meta.get("modes")
+    docs_modes = docs_modes_raw if isinstance(docs_modes_raw, list) else []
+    docs_modes = [str(item) for item in docs_modes if str(item) in {"with_docs", "without_docs"}]
+    if not docs_modes:
+        docs_modes = ["with_docs", "without_docs"] if default_docs_available else ["without_docs"]
     integration_status = _integration_status(config)
     runtime_used = str(meta.get("runtime") or "ollama")
     default_docs_available = READINESS_DEFAULT_DOCS_PACK_PATH.exists()
@@ -589,7 +594,7 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
         "whatIsBenchmarked": (
             "How accurately a model makes payment-policy decisions (allow/block, approval gate, risk level, and required controls), "
             "plus whether eligible scenarios complete real execution across Chainlink orchestration, Hedera settlement, and Ledger checks, "
-            "grounded against selected official documentation sources."
+            "measured both with official-doc context and without doc context."
         ),
         "mocked": False,
         "suiteName": readiness_suite.get("name", "x402Bench Readiness Suite"),
@@ -604,7 +609,8 @@ def _readiness_definition(report: dict[str, Any] | None = None) -> dict[str, Any
         "docs": {
             "defaultPackAvailable": default_docs_available,
             "defaultPackPath": str(READINESS_DEFAULT_DOCS_PACK_PATH) if default_docs_available else None,
-            "enabled": bool(docs_meta.get("enabled", default_docs_available)),
+            "enabled": "with_docs" in docs_modes,
+            "modes": docs_modes,
             "name": docs_meta.get("name"),
             "version": docs_meta.get("version"),
             "sourceCount": docs_meta.get("sourceCount", 0),
@@ -664,6 +670,82 @@ def _scenario_templates() -> list[dict[str, Any]]:
     return templates
 
 
+def _normalize_doc_mode(value: Any) -> str:
+    mode = str(value or "").strip().lower()
+    return mode if mode in {"with_docs", "without_docs"} else "with_docs"
+
+
+def _rows_with_params(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        model_name = str(row.get("model", ""))
+        enriched.append(
+            {
+                **row,
+                "paramsBillions": _model_param_size_billions(model_name),
+            }
+        )
+    return enriched
+
+
+def _build_model_comparisons(models_by_doc_mode: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    by_model: dict[str, dict[str, Any]] = {}
+    for mode in ("with_docs", "without_docs"):
+        for row in models_by_doc_mode.get(mode, []):
+            model = str(row.get("model", ""))
+            if not model:
+                continue
+            if model not in by_model:
+                by_model[model] = {
+                    "model": model,
+                    "paramsBillions": row.get("paramsBillions"),
+                    "withDocs": None,
+                    "withoutDocs": None,
+                    "deltaOverallScore": None,
+                    "deltaDecisionAccuracyPct": None,
+                    "deltaWorkflowSuccessRatePct": None,
+                    "deltaDocsGroundingRatePct": None,
+                }
+            key = "withDocs" if mode == "with_docs" else "withoutDocs"
+            by_model[model][key] = row
+            if by_model[model].get("paramsBillions") is None and row.get("paramsBillions") is not None:
+                by_model[model]["paramsBillions"] = row.get("paramsBillions")
+
+    comparisons = list(by_model.values())
+    for entry in comparisons:
+        with_docs = entry.get("withDocs")
+        without_docs = entry.get("withoutDocs")
+        if isinstance(with_docs, dict) and isinstance(without_docs, dict):
+            entry["deltaOverallScore"] = round(
+                float(with_docs.get("overallScore", 0)) - float(without_docs.get("overallScore", 0)),
+                2,
+            )
+            entry["deltaDecisionAccuracyPct"] = round(
+                float(with_docs.get("decisionAccuracyPct", 0)) - float(without_docs.get("decisionAccuracyPct", 0)),
+                2,
+            )
+            entry["deltaWorkflowSuccessRatePct"] = round(
+                float(with_docs.get("workflowSuccessRatePct", 0)) - float(without_docs.get("workflowSuccessRatePct", 0)),
+                2,
+            )
+            entry["deltaDocsGroundingRatePct"] = round(
+                float(with_docs.get("docsGroundingRatePct", 0)) - float(without_docs.get("docsGroundingRatePct", 0)),
+                2,
+            )
+
+    def _comparison_sort_key(item: dict[str, Any]) -> tuple[float, float, str]:
+        with_docs = item.get("withDocs") if isinstance(item.get("withDocs"), dict) else {}
+        without_docs = item.get("withoutDocs") if isinstance(item.get("withoutDocs"), dict) else {}
+        primary = float(with_docs.get("overallScore", without_docs.get("overallScore", -1)))
+        secondary = float(with_docs.get("decisionAccuracyPct", without_docs.get("decisionAccuracyPct", -1)))
+        model = str(item.get("model", ""))
+        return (-primary, -secondary, model)
+
+    return sorted(comparisons, key=_comparison_sort_key)
+
+
 def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]:
     models = _list_ollama_models()
     recommended_models = _recommended_models(models)
@@ -682,6 +764,11 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
             "recommendedModels": recommended_models,
             "latest": None,
             "models": [],
+            "modelsByDocMode": {
+                "with_docs": [],
+                "without_docs": [],
+            },
+            "modelComparisons": [],
             "results": [],
             "scenarios": templates,
         }
@@ -689,27 +776,37 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
     meta = report.get("meta", {}) if isinstance(report.get("meta"), dict) else {}
     summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
     model_rows = summary.get("models", []) if isinstance(summary.get("models"), list) else []
+    by_mode_raw = summary.get("byDocMode", {}) if isinstance(summary.get("byDocMode"), dict) else {}
+    models_by_doc_mode: dict[str, list[dict[str, Any]]] = {"with_docs": [], "without_docs": []}
+    for mode_key, rows in by_mode_raw.items():
+        mode = _normalize_doc_mode(mode_key)
+        if isinstance(rows, list):
+            models_by_doc_mode[mode] = _rows_with_params(rows)
+    if not models_by_doc_mode["with_docs"] and not models_by_doc_mode["without_docs"] and model_rows:
+        fallback_mode = "with_docs" if bool(meta.get("docs", {}).get("enabled", True)) else "without_docs"
+        models_by_doc_mode[fallback_mode] = _rows_with_params(model_rows)
+
+    primary_model_rows = (
+        models_by_doc_mode["with_docs"]
+        or models_by_doc_mode["without_docs"]
+        or _rows_with_params(model_rows)
+    )
+
     raw_results = report.get("results", []) if isinstance(report.get("results"), list) else []
-    model_rows_with_params = []
-    for row in model_rows:
-        if not isinstance(row, dict):
-            continue
-        model_name = str(row.get("model", ""))
-        model_rows_with_params.append(
-            {
-                **row,
-                "paramsBillions": _model_param_size_billions(model_name),
-            }
-        )
 
     trimmed_results = []
     for item in raw_results:
         if not isinstance(item, dict):
             continue
         llm = item.get("llm", {}) if isinstance(item.get("llm"), dict) else {}
+        doc_mode = _normalize_doc_mode(
+            item.get("docMode")
+            or ("with_docs" if bool((item.get("docs") or {}).get("enabled")) else "without_docs")
+        )
         trimmed_results.append(
             {
                 "model": item.get("model"),
+                "docMode": doc_mode,
                 "caseId": item.get("caseId"),
                 "caseName": item.get("caseName"),
                 "executionMode": item.get("executionMode"),
@@ -758,9 +855,12 @@ def _build_readiness_dashboard_payload(report: dict[str, Any]) -> dict[str, Any]
             "suiteVersion": meta.get("suiteVersion", definition.get("suiteVersion")),
             "models": meta.get("models", []),
             "docs": meta.get("docs", {}),
+            "docsModes": definition.get("docs", {}).get("modes", ["with_docs"]),
             "totalEvaluations": summary.get("totalEvaluations", 0),
         },
-        "models": model_rows_with_params,
+        "models": primary_model_rows,
+        "modelsByDocMode": models_by_doc_mode,
+        "modelComparisons": _build_model_comparisons(models_by_doc_mode),
         "results": trimmed_results,
         "scenarios": templates,
     }
@@ -1134,6 +1234,8 @@ def run_readiness_benchmark(
             str(payload.docsTopK),
             "--require-citations",
             str(payload.requireCitations).lower(),
+            "--doc-modes",
+            "with_docs,without_docs",
             "--runs-per-scenario",
             str(payload.runsPerScenario),
             "--max-tokens",

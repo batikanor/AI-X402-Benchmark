@@ -53,6 +53,14 @@ Default docs pack is built from:
 Source manifest:
 - [`readiness_bench/docs_sources/default_sources.json`](./readiness_bench/docs_sources/default_sources.json)
 
+Dual-mode evaluation (default):
+- `with_docs`: model receives retrieved official-doc excerpts in prompt context
+- `without_docs`: model receives zero docs excerpts (tests retained sponsor knowledge)
+
+Each readiness run now executes both modes for every selected model and case, then reports:
+- per-mode leaderboards
+- per-model deltas (`with_docs - without_docs`)
+
 ## Scoring model
 
 Per-case scoring combines:
@@ -148,6 +156,16 @@ npm run docs:build
 
 ```bash
 npm run readiness:bench
+```
+
+Optional explicit mode override:
+
+```bash
+node scripts/run_llm_readiness_benchmark.mjs \
+  --config config/benchmark.config.json \
+  --suite readiness_bench/suite.json \
+  --models qwen3:4b-instruct,phi4:14b \
+  --doc-modes with_docs,without_docs
 ```
 
 Wider model set:

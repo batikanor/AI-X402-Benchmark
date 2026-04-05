@@ -19,7 +19,13 @@ import useSWR from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { fetchHealth, fetchReadinessDashboard, runReadinessBenchmark, type ReadinessDashboardResponse } from "@/lib/api";
+import {
+  fetchHealth,
+  fetchReadinessDashboard,
+  runReadinessBenchmark,
+  type DocMode,
+  type ReadinessDashboardResponse,
+} from "@/lib/api";
 
 type RuntimeMode = "ollama" | "openai_compat";
 type SponsorKey = "Hedera" | "Chainlink" | "Ledger";
@@ -341,6 +347,10 @@ function passLabel(value: boolean): string {
   return value ? "pass" : "fail";
 }
 
+function docModeLabel(mode: DocMode): string {
+  return mode === "with_docs" ? "With Docs Context" : "Without Docs Context";
+}
+
 function caseSponsors(caseDef: ReadinessScenario | undefined, fallbackExecutionMode: string): SponsorKey[] {
   const explicitTargets = Array.isArray(caseDef?.challengeTargets) ? caseDef.challengeTargets : [];
   const explicitSponsors = explicitTargets
@@ -530,6 +540,7 @@ export default function HomePage() {
   const [runSummary, setRunSummary] = useState("");
   const [runTechnicalLog, setRunTechnicalLog] = useState("");
   const [activeModel, setActiveModel] = useState("");
+  const [analysisDocMode, setAnalysisDocMode] = useState<DocMode>("with_docs");
   const [sponsorShowAllModels, setSponsorShowAllModels] = useState(false);
 
   useEffect(() => {
@@ -557,22 +568,49 @@ export default function HomePage() {
     }
   }, [data?.track.docs, docsPackPath]);
 
+  const availableDocModes = useMemo(() => {
+    const fromTrack = (data?.track.docs?.modes ?? []).filter((mode): mode is DocMode => mode === "with_docs" || mode === "without_docs");
+    if (fromTrack.length) return Array.from(new Set(fromTrack));
+    return ["with_docs"] as DocMode[];
+  }, [data?.track.docs?.modes]);
+
+  useEffect(() => {
+    if (!availableDocModes.includes(analysisDocMode)) {
+      setAnalysisDocMode(availableDocModes[0] ?? "with_docs");
+    }
+  }, [availableDocModes, analysisDocMode]);
+
+  const modeModelRows = useMemo(() => {
+    const byMode = data?.modelsByDocMode;
+    if (byMode) {
+      const modeRows = analysisDocMode === "with_docs" ? byMode.with_docs : byMode.without_docs;
+      if (Array.isArray(modeRows) && modeRows.length) return modeRows;
+    }
+    return data?.models ?? [];
+  }, [data?.modelsByDocMode, data?.models, analysisDocMode]);
+
   const sortedModels = useMemo(() => {
-    if (!data?.models.length) return [];
-    return [...data.models].sort((a, b) => {
+    if (!modeModelRows.length) return [];
+    return [...modeModelRows].sort((a, b) => {
       if (b.overallScore !== a.overallScore) return b.overallScore - a.overallScore;
       if (b.decisionAccuracyPct !== a.decisionAccuracyPct) return b.decisionAccuracyPct - a.decisionAccuracyPct;
       return a.avgTotalLatencyMs - b.avgTotalLatencyMs;
     });
-  }, [data?.models]);
+  }, [modeModelRows]);
 
   const modelParamsByName = useMemo(() => {
     const map = new Map<string, number | null>();
     for (const row of data?.models ?? []) {
       map.set(row.model, row.paramsBillions ?? null);
     }
+    for (const row of data?.modelsByDocMode?.with_docs ?? []) {
+      map.set(row.model, row.paramsBillions ?? null);
+    }
+    for (const row of data?.modelsByDocMode?.without_docs ?? []) {
+      map.set(row.model, row.paramsBillions ?? null);
+    }
     return map;
-  }, [data?.models]);
+  }, [data?.models, data?.modelsByDocMode?.with_docs, data?.modelsByDocMode?.without_docs]);
 
   useEffect(() => {
     if (!sortedModels.length) {
@@ -666,7 +704,8 @@ export default function HomePage() {
     const results = data?.results ?? [];
     const latestByModelCase = new Map<string, ReadinessResult>();
     for (const item of results) {
-      const key = `${item.model}::${item.caseId}`;
+      const mode = (item.docMode ?? (item.docs?.enabled ? "with_docs" : "without_docs")) as DocMode;
+      const key = `${item.model}::${mode}::${item.caseId}`;
       const previous = latestByModelCase.get(key);
       if (!previous || item.attempt > previous.attempt) {
         latestByModelCase.set(key, item);
@@ -674,6 +713,13 @@ export default function HomePage() {
     }
     return Array.from(latestByModelCase.values());
   }, [data?.results]);
+
+  const activeModeResultRows = useMemo(() => {
+    return latestResultRows.filter((row) => {
+      const rowMode = (row.docMode ?? (row.docs?.enabled ? "with_docs" : "without_docs")) as DocMode;
+      return rowMode === analysisDocMode;
+    });
+  }, [latestResultRows, analysisDocMode]);
 
   const scenarioById = useMemo(() => {
     const map = new Map<string, ReadinessScenario>();
@@ -697,7 +743,7 @@ export default function HomePage() {
     const map = new Map<string, ModelCaseStats>();
 
     for (const modelRow of sortedModels) {
-      const rows = latestResultRows.filter((row) => row.model === modelRow.model);
+      const rows = activeModeResultRows.filter((row) => row.model === modelRow.model);
       const realCases = rows.filter((row) => row.executionMode === "real");
       const eligibleCases = rows.filter((row) => row.evaluation.executionEligible);
       const eligibleRealCases = realCases.filter((row) => row.evaluation.executionEligible);
@@ -716,7 +762,7 @@ export default function HomePage() {
     }
 
     return map;
-  }, [sortedModels, latestResultRows]);
+  }, [sortedModels, activeModeResultRows]);
 
   const leader = sortedModels[0];
   const leaderExecutionDetail = useMemo(() => {
@@ -737,7 +783,7 @@ export default function HomePage() {
     const byModel = new Map<string, SponsorAggregate[]>();
 
     for (const modelRow of sortedModels) {
-      const modelRows = latestResultRows.filter((row) => row.model === modelRow.model);
+      const modelRows = activeModeResultRows.filter((row) => row.model === modelRow.model);
       const sponsorRows: SponsorAggregate[] = [];
 
       for (const sponsor of SPONSORS) {
@@ -811,7 +857,7 @@ export default function HomePage() {
     }
 
     return byModel;
-  }, [sortedModels, latestResultRows, scenarioById]);
+  }, [sortedModels, activeModeResultRows, scenarioById]);
 
   const activeModelRow = useMemo(
     () => sortedModels.find((row) => row.model === activeModel) ?? null,
@@ -826,6 +872,70 @@ export default function HomePage() {
     () => sponsorBreakdownByModel.get(activeModel ?? "") ?? [],
     [sponsorBreakdownByModel, activeModel],
   );
+
+  const modelComparisons = useMemo(() => {
+    if (data?.modelComparisons?.length) return data.modelComparisons;
+
+    const withDocs = data?.modelsByDocMode?.with_docs ?? [];
+    const withoutDocs = data?.modelsByDocMode?.without_docs ?? [];
+    if (!withDocs.length && !withoutDocs.length) return [];
+
+    const byModel = new Map<
+      string,
+      {
+        model: string;
+        paramsBillions: number | null;
+        withDocs: ReadinessDashboardResponse["models"][number] | null;
+        withoutDocs: ReadinessDashboardResponse["models"][number] | null;
+        deltaOverallScore: number | null;
+        deltaDecisionAccuracyPct: number | null;
+        deltaWorkflowSuccessRatePct: number | null;
+        deltaDocsGroundingRatePct: number | null;
+      }
+    >();
+
+    const ensure = (model: string, paramsBillions: number | null) => {
+      if (!byModel.has(model)) {
+        byModel.set(model, {
+          model,
+          paramsBillions,
+          withDocs: null,
+          withoutDocs: null,
+          deltaOverallScore: null,
+          deltaDecisionAccuracyPct: null,
+          deltaWorkflowSuccessRatePct: null,
+          deltaDocsGroundingRatePct: null,
+        });
+      }
+      const entry = byModel.get(model)!;
+      if (entry.paramsBillions == null && paramsBillions != null) entry.paramsBillions = paramsBillions;
+      return entry;
+    };
+
+    for (const row of withDocs) {
+      const entry = ensure(row.model, row.paramsBillions);
+      entry.withDocs = row;
+    }
+    for (const row of withoutDocs) {
+      const entry = ensure(row.model, row.paramsBillions);
+      entry.withoutDocs = row;
+    }
+
+    for (const entry of byModel.values()) {
+      if (entry.withDocs && entry.withoutDocs) {
+        entry.deltaOverallScore = Number((entry.withDocs.overallScore - entry.withoutDocs.overallScore).toFixed(2));
+        entry.deltaDecisionAccuracyPct = Number((entry.withDocs.decisionAccuracyPct - entry.withoutDocs.decisionAccuracyPct).toFixed(2));
+        entry.deltaWorkflowSuccessRatePct = Number((entry.withDocs.workflowSuccessRatePct - entry.withoutDocs.workflowSuccessRatePct).toFixed(2));
+        entry.deltaDocsGroundingRatePct = Number((entry.withDocs.docsGroundingRatePct - entry.withoutDocs.docsGroundingRatePct).toFixed(2));
+      }
+    }
+
+    return Array.from(byModel.values()).sort((a, b) => {
+      const aScore = a.withDocs?.overallScore ?? a.withoutDocs?.overallScore ?? -1;
+      const bScore = b.withDocs?.overallScore ?? b.withoutDocs?.overallScore ?? -1;
+      return bScore - aScore;
+    });
+  }, [data?.modelComparisons, data?.modelsByDocMode?.with_docs, data?.modelsByDocMode?.without_docs]);
 
   const scenarioCoverageRows = useMemo(() => {
     const scenarios = data?.scenarios ?? [];
@@ -845,10 +955,10 @@ export default function HomePage() {
   }, [data?.scenarios]);
 
   const activeModelCaseRows = useMemo(() => {
-    return latestResultRows
+    return activeModeResultRows
       .filter((row) => row.model === activeModel)
       .sort((a, b) => a.caseName.localeCompare(b.caseName));
-  }, [latestResultRows, activeModel]);
+  }, [activeModeResultRows, activeModel]);
 
   const sponsorVisibleModels = useMemo(() => {
     if (sponsorShowAllModels) return sortedModels;
@@ -911,14 +1021,15 @@ export default function HomePage() {
 
       setRunTechnicalLog(compactLog(result.stdout || result.stderr || ""));
       const updated = await mutate();
-      const topModel = updated?.models?.length
-        ? [...updated.models].sort((a, b) => b.overallScore - a.overallScore)[0]
+      const updatedModeRows = updated?.modelsByDocMode?.[analysisDocMode] ?? updated?.models ?? [];
+      const topModel = updatedModeRows.length
+        ? [...updatedModeRows].sort((a, b) => b.overallScore - a.overallScore)[0]
         : null;
 
       if (result.ok) {
         if (updated?.latest && topModel) {
           setRunSummary(
-            `Run completed. Leader ${topModel.model} (${paramsLabel(topModel.paramsBillions)}) | Score ${metricLabel(topModel.overallScore)} | Decision ${metricLabel(topModel.decisionAccuracyPct, "%")} | Workflow ${metricLabel(topModel.workflowSuccessRatePct, "%")} | Run ${updated.latest.runId}.`,
+            `Run completed (${docModeLabel(analysisDocMode)} view). Leader ${topModel.model} (${paramsLabel(topModel.paramsBillions)}) | Score ${metricLabel(topModel.overallScore)} | Decision ${metricLabel(topModel.decisionAccuracyPct, "%")} | Workflow ${metricLabel(topModel.workflowSuccessRatePct, "%")} | Run ${updated.latest.runId}.`,
           );
         } else {
           setRunSummary("Run completed. Dashboard is refreshing.");
@@ -951,7 +1062,7 @@ export default function HomePage() {
               </Badge>
               <h1 className="text-3xl font-medium tracking-tight md:text-4xl">x402Bench LLM Readiness</h1>
               <p className="max-w-4xl text-sm text-stone-200 md:text-[15px]">
-                Compare models on decision quality, documentation grounding, and real sponsor-workflow execution in one benchmark interface.
+                Compare models with and without documentation context across policy quality, docs grounding, and real sponsor-workflow execution.
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
                 {(data?.project.sponsors ?? SPONSORS).map((sponsor) => (
@@ -1261,7 +1372,7 @@ export default function HomePage() {
             <Card className="space-y-4 border-[#4a4a46] bg-soft p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-stone-100">Run Panel</p>
-                <p className="text-xs text-stone-300">Launch one integrated benchmark run.</p>
+                <p className="text-xs text-stone-300">Launch one integrated benchmark run (both with-docs and without-docs modes).</p>
               </div>
               <div className="space-y-1">
                 <label htmlFor="runs-per-scenario" className="text-sm font-medium">
@@ -1277,6 +1388,29 @@ export default function HomePage() {
                   <option value={2}>2 (stable)</option>
                   <option value={3}>3 (highest confidence)</option>
                 </select>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Comparison lens</p>
+                <div className="flex flex-wrap gap-2">
+                  {availableDocModes.map((mode) => (
+                    <button
+                      key={`doc-mode-${mode}`}
+                      type="button"
+                      onClick={() => setAnalysisDocMode(mode)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                        analysisDocMode === mode
+                          ? "border-accent bg-accent/20 text-stone-100"
+                          : "border-[#6b6b65] bg-[#1f1d1a] text-stone-200 hover:border-accent/60 hover:bg-accent/20"
+                      }`}
+                    >
+                      {docModeLabel(mode)}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-stone-400">
+                  Every run scores each model in both modes. This toggle changes which mode you inspect in detail.
+                </p>
               </div>
 
               <Button onClick={handleRun} disabled={running || effectiveModels.length < 2} className="w-full gap-2">
@@ -1304,6 +1438,7 @@ export default function HomePage() {
                 <p>
                   Cases: {suiteCaseMix.total} total ({suiteCaseMix.real} real, {suiteCaseMix.decisionOnly} decision-only)
                 </p>
+                <p>Docs modes: {availableDocModes.join(", ")}</p>
                 <p>Docs grounding: {data?.track.docs?.enabled ? "On" : "Off"}</p>
                 <p>Integrations ready: {data?.track.integrationStatus?.isFullyConfigured ? "Yes" : "Partial"}</p>
               </div>
@@ -1371,7 +1506,7 @@ export default function HomePage() {
                   </tr>
                   <tr className="border-t border-[#4a4a46]">
                     <td className="px-2 py-2 font-medium">Execution gate pass</td>
-                    <td className="px-2 py-2">Model output passed policy/docs requirements to become executable.</td>
+                    <td className="px-2 py-2">Model output passed policy requirements to become executable.</td>
                     <td className="px-2 py-2">Usually all cases; additionally shown as real-only count.</td>
                   </tr>
                   <tr className="border-t border-[#4a4a46]">
@@ -1384,7 +1519,11 @@ export default function HomePage() {
             </div>
           </Disclosure>
 
-          <Disclosure title="Model Ranking" subtitle="Performance across policy, docs grounding, and execution" defaultOpen>
+          <Disclosure
+            title="Model Ranking"
+            subtitle={`Performance across policy, docs grounding, and execution (${docModeLabel(analysisDocMode)})`}
+            defaultOpen
+          >
             <div className="overflow-x-auto">
               <table className="data-table min-w-full text-left text-sm">
                 <thead className="text-stone-300">
@@ -1441,7 +1580,63 @@ export default function HomePage() {
             </div>
           </Disclosure>
 
-          <Disclosure title="Sponsor Track Breakdown" subtitle="Per-sponsor model performance on policy, docs, and execution" defaultOpen>
+          <Disclosure
+            title="Docs Context Impact"
+            subtitle="Per-model delta between With Docs Context and Without Docs Context."
+            defaultOpen
+          >
+            <div className="overflow-x-auto">
+              <table className="data-table min-w-full text-left text-sm">
+                <thead className="text-stone-300">
+                  <tr>
+                    <th className="px-2 py-2">Model</th>
+                    <th className="px-2 py-2">Params</th>
+                    <th className="px-2 py-2">With Docs Score</th>
+                    <th className="px-2 py-2">Without Docs Score</th>
+                    <th className="px-2 py-2">Delta Score</th>
+                    <th className="px-2 py-2">With Docs Decision %</th>
+                    <th className="px-2 py-2">Without Docs Decision %</th>
+                    <th className="px-2 py-2">Delta Decision %</th>
+                    <th className="px-2 py-2">With Docs Workflow %</th>
+                    <th className="px-2 py-2">Without Docs Workflow %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelComparisons.map((row) => (
+                    <tr key={`docs-impact-${row.model}`} className="border-t border-[#4a4a46]">
+                      <td className="px-2 py-2 font-medium">{row.model}</td>
+                      <td className="px-2 py-2">{paramsLabel(row.paramsBillions)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.withDocs?.overallScore)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.withoutDocs?.overallScore)}</td>
+                      <td className={`px-2 py-2 font-semibold ${toneForRate(row.deltaOverallScore ?? undefined)}`}>
+                        {metricLabel(row.deltaOverallScore ?? undefined)}
+                      </td>
+                      <td className="px-2 py-2">{metricLabel(row.withDocs?.decisionAccuracyPct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.withoutDocs?.decisionAccuracyPct)}</td>
+                      <td className={`px-2 py-2 font-semibold ${toneForRate(row.deltaDecisionAccuracyPct ?? undefined)}`}>
+                        {metricLabel(row.deltaDecisionAccuracyPct ?? undefined)}
+                      </td>
+                      <td className="px-2 py-2">{metricLabel(row.withDocs?.workflowSuccessRatePct)}</td>
+                      <td className="px-2 py-2">{metricLabel(row.withoutDocs?.workflowSuccessRatePct)}</td>
+                    </tr>
+                  ))}
+                  {!modelComparisons.length && !isLoading ? (
+                    <tr>
+                      <td className="px-2 py-3 text-stone-400" colSpan={10}>
+                        No dual-mode comparison rows yet. Run the benchmark to populate with/without docs deltas.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </Disclosure>
+
+          <Disclosure
+            title="Sponsor Track Breakdown"
+            subtitle={`Per-sponsor model performance on policy, docs, and execution (${docModeLabel(analysisDocMode)})`}
+            defaultOpen
+          >
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
                 <button
@@ -1563,7 +1758,9 @@ export default function HomePage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold">Model Inspection</h2>
-              <p className="text-sm text-stone-300">Select one model to inspect scenario outcomes and sponsor-track results.</p>
+              <p className="text-sm text-stone-300">
+                Select one model to inspect scenario outcomes and sponsor-track results ({docModeLabel(analysisDocMode)}).
+              </p>
             </div>
           </div>
 
@@ -1694,7 +1891,11 @@ export default function HomePage() {
             </div>
           </Disclosure>
 
-          <Disclosure title="Selected Model Scenario Audit" subtitle="Case-by-case pass/fail with human-readable explanations" defaultOpen>
+          <Disclosure
+            title="Selected Model Scenario Audit"
+            subtitle={`Case-by-case pass/fail with human-readable explanations (${docModeLabel(analysisDocMode)})`}
+            defaultOpen
+          >
             <div className="space-y-4">
               {activeModelCaseRows.map((row) => {
                 const checklist = buildHumanTaskChecklist(row);
@@ -1705,7 +1906,10 @@ export default function HomePage() {
                 return (
                   <Card key={`${row.model}-${row.caseId}`} className="border-[#4a4a46] bg-soft p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                        <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">{row.caseName}</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">{row.caseName}</Badge>
+                      <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">
+                        {docModeLabel((row.docMode ?? (row.docs?.enabled ? "with_docs" : "without_docs")) as DocMode)}
+                      </Badge>
                       <Badge className={`border ${statusChipTone(row.workflow.status)}`}>{normalizeWorkflowStatus(row.workflow.status)}</Badge>
                       <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">tasks passed: {passedCount}/{checklist.length}</Badge>
                       <Badge className="border-[#6b6b65] bg-[#1f1d1a] text-stone-100">latency: {metricLabel(row.totalLatencyMs)} ms</Badge>
