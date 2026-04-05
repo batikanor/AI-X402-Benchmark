@@ -20,10 +20,10 @@ Current benchmark suite:
 This section is a direct copy of the newest benchmark artifact in [`readiness_bench/results/`](./readiness_bench/results/).
 
 Run metadata:
-- Run ID: `x402-readiness-20260405062330-2f907119`
-- Source file: `readiness_bench/results/x402-readiness-20260405062330-2f907119.json`
-- Started: `2026-04-05T06:23:30.997Z`
-- Finished: `2026-04-05T06:32:19.120Z`
+- Run ID: `x402-readiness-20260405073522-f96cdccb`
+- Source file: `readiness_bench/results/x402-readiness-20260405073522-f96cdccb.json`
+- Started: `2026-04-05T07:35:22.638Z`
+- Finished: `2026-04-05T07:43:45.591Z`
 - Runtime: `openai_compat` (OpenRouter/OpenAI-compatible)
 - Models: `6`
 - Total evaluations: `144` (`12 cases × 2 doc modes × 6 models`)
@@ -32,23 +32,23 @@ Run metadata:
 
 | Rank | Model | Overall | Policy Quality % | Strict Match % | Required Docs Coverage % | Gate Eligible % | Executed Pass % | Mean E2E Latency (ms) |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | `openai/gpt-5.4-mini` | 54.81 | 73.37 | 8.33 | 0.00 | 8.33 | 0.00 | 1227.10 |
-| 2 | `meta-llama/llama-3.1-8b-instruct` | 54.18 | 70.35 | 33.33 | 0.00 | 33.33 | 0.00 | 3557.42 |
-| 3 | `openai/gpt-5.4-nano` | 52.64 | 70.35 | 16.67 | 5.56 | 16.67 | 0.00 | 1672.55 |
-| 4 | `google/gemma-2-9b-it` | 50.15 | 67.28 | 16.67 | 0.00 | 16.67 | 0.00 | 1543.30 |
-| 5 | `qwen/qwen3-8b` | 44.02 | 60.35 | 16.67 | 0.00 | 16.67 | 0.00 | 11812.83 |
-| 6 | `qwen/qwen2.5-coder-7b-instruct` | 2.86 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 1496.69 |
+| 1 | `openai/gpt-5.4-mini` | 69.35 | 74.39 | 8.33 | 13.89 | 8.33 | 100.00 | 1465.94 |
+| 2 | `google/gemma-2-9b-it` | 65.58 | 64.99 | 16.67 | 0.00 | 16.67 | 100.00 | 1189.76 |
+| 3 | `meta-llama/llama-3.1-8b-instruct` | 64.54 | 66.96 | 16.67 | 0.00 | 16.67 | 100.00 | 3268.00 |
+| 4 | `qwen/qwen3-8b` | 47.41 | 45.10 | 8.33 | 0.00 | 8.33 | 100.00 | 10550.23 |
+| 5 | `openai/gpt-5.4-nano` | 47.37 | 64.60 | 0.00 | 6.94 | 0.00 | 0.00 | 1519.17 |
+| 6 | `qwen/qwen2.5-coder-7b-instruct` | 2.88 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 1435.84 |
 
 ### Model scores (without docs context)
 
 | Rank | Model | Overall | Policy Quality % | Strict Match % | Required Docs Coverage % | Gate Eligible % | Executed Pass % | Mean E2E Latency (ms) |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | `qwen/qwen3-8b` | 63.67 | 86.25 | 33.33 | 0.00 | 33.33 | 0.00 | 11153.67 |
-| 2 | `google/gemma-2-9b-it` | 60.82 | 81.80 | 33.33 | 0.00 | 41.67 | 0.00 | 2165.92 |
-| 3 | `openai/gpt-5.4-mini` | 59.95 | 82.17 | 16.67 | 0.00 | 16.67 | 0.00 | 1245.25 |
-| 4 | `meta-llama/llama-3.1-8b-instruct` | 57.12 | 74.81 | 25.00 | 0.00 | 25.00 | 0.00 | 1857.98 |
-| 5 | `openai/gpt-5.4-nano` | 52.29 | 72.53 | 8.33 | 0.00 | 25.00 | 0.00 | 1822.07 |
-| 6 | `qwen/qwen2.5-coder-7b-instruct` | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 3199.91 |
+| 1 | `qwen/qwen3-8b` | 78.85 | 86.81 | 33.33 | 0.00 | 33.33 | 100.00 | 11171.13 |
+| 2 | `openai/gpt-5.4-mini` | 74.70 | 81.07 | 25.00 | 0.00 | 16.67 | 100.00 | 1342.61 |
+| 3 | `meta-llama/llama-3.1-8b-instruct` | 73.02 | 78.24 | 25.00 | 0.00 | 33.33 | 100.00 | 2523.22 |
+| 4 | `google/gemma-2-9b-it` | 72.77 | 78.92 | 16.67 | 0.00 | 25.00 | 100.00 | 1261.70 |
+| 5 | `openai/gpt-5.4-nano` | 67.40 | 74.40 | 8.33 | 0.00 | 16.67 | 100.00 | 1686.02 |
+| 6 | `qwen/qwen2.5-coder-7b-instruct` | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 1992.00 |
 
 ## Why this exists
 
