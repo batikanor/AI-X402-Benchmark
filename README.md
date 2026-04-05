@@ -163,7 +163,7 @@ export HF_TOKEN=hf_xxx
 npm run readiness:bench:hf
 ```
 
-### 5) Start backend + frontend
+### 5) Start backend + frontend (stable demo mode)
 
 ```bash
 # terminal A
@@ -174,11 +174,22 @@ npm run api:start
 
 # terminal B
 npm --prefix frontend install
-npm --prefix frontend run dev -- --port 46211
+npm run ui:prod
+
+# terminal C (after terminal B prints "Ready")
+npm run ui:health
 ```
 
 Open:
 - [http://127.0.0.1:46211](http://127.0.0.1:46211)
+
+`ui:health` validates that the HTML and linked CSS both return `200` so you do not get an unstyled page.
+
+Optional (local UI iteration only):
+
+```bash
+npm run ui:dev
+```
 
 ## Artifacts
 
